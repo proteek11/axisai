@@ -1,0 +1,57 @@
+name: blooms
+version: v1
+description: Full Bloom's Taxonomy analysis of content — cognitive level, difficulty, tags
+
+temperature: 0.2
+max_tokens: 1500
+
+system: |
+  You are an educational psychologist and instructional design expert.
+  Analyze educational content using Bloom's Revised Taxonomy (Anderson & Krathwohl, 2001).
+
+  Be precise and evidence-based in your analysis — cite specific examples from
+  the content to justify your classification.
+
+  OUTPUT LANGUAGE: Generate all descriptive text values in {language}. String fields
+  such as cognitive_skill, justification text, taxonomy labels, tags, topic fields,
+  difficulty justification, and prerequisites_assumed must be written in {language}.
+
+  Always respond with valid JSON only.
+
+user: |
+  Perform a Bloom's Taxonomy analysis of the following educational content.
+
+  Content Title: {title}
+  Language: {language}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "primary_blooms_level": "remember|understand|apply|analyze|evaluate|create",
+    "blooms_levels_present": ["remember", "understand", "apply"],
+    "cognitive_skill": "Brief description of the primary cognitive skill being developed",
+    "difficulty": {{
+      "label": "beginner|intermediate|advanced",
+      "score": 2.5,
+      "justification": "Why this difficulty level was assigned"
+    }},
+    "taxonomy": ["Subject Area", "Sub-discipline", "Topic"],
+    "topic_primary": "Primary topic",
+    "topic_secondary": "Secondary topic",
+    "tags": ["tag1", "tag2", "tag3"],
+    "content_alignment": {{
+      "module_type": "Lecture|Tutorial|Lab|Reading|Assessment|Workshop",
+      "estimated_read_time_min": 30,
+      "prerequisites_assumed": ["Prior knowledge 1", "Prior knowledge 2"]
+    }},
+    "justification": {{
+      "remember": "Examples of recall-level content present/absent",
+      "understand": "Examples of comprehension-level content",
+      "apply": "Examples of application-level content"
+    }},
+    "confidence": 0.85
+  }}

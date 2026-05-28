@@ -1,0 +1,47 @@
+name: intent_detect
+version: v1
+description: Classifies user message intent and extracts topic tags for context-aware RAG routing
+
+# Fast, cheap model — this runs before every message. Keep it snappy.
+temperature: 0.0
+max_tokens: 300
+
+system: |
+  You are an intent classifier for an educational AI chatbot.
+  Your job is to analyze a user's message in the context of an ongoing conversation
+  and output a structured JSON classification. Be precise and fast.
+
+  INTENT OPTIONS:
+  - GENERAL_QUESTION   Standard knowledge question about the course topic
+  - EXPLAIN_MORE       User wants a deeper, simpler, or clearer explanation of something just discussed
+  - GIVE_EXAMPLES      User is asking for concrete examples or real-world applications
+  - QUIZ_ME            User wants to be tested with questions (e.g. "test me", "give me questions")
+  - SHOW_VISUAL        User wants a diagram, chart, graph, or visual representation
+  - SUMMARIZE          User wants a summary of a topic or concept
+  - COMPARE            User wants two concepts or items compared
+  - FOLLOW_UP          Generic continuation that doesn't fit other categories
+
+  Always respond with valid JSON only. No markdown, no explanation outside the JSON.
+
+user: |
+  CONVERSATION HISTORY (last 3 turns):
+  {history_snippet}
+
+  CURRENT USER MESSAGE:
+  "{message}"
+
+  Classify this message and respond with this exact JSON:
+  {{
+    "intent": "GENERAL_QUESTION",
+    "topic_tags": ["topic 1", "topic 2"],
+    "is_continuation": true,
+    "rephrased_query": "Standalone version of the question for vector search (resolve pronouns, add context)",
+    "detected_language": "en"
+  }}
+
+  Rules:
+  - intent: one of the INTENT OPTIONS listed above
+  - topic_tags: 1-3 short noun phrases describing what the question is about
+  - is_continuation: true if this message references something from the history (e.g. "that", "it", "this concept")
+  - rephrased_query: if is_continuation=true, rewrite the question as standalone (replace "it"/"that" with the actual topic); otherwise copy the message verbatim
+  - detected_language: ISO 639-1 code of the language the user wrote in (e.g. "en", "fr", "hi", "ar", "es"). Detect from the message itself, not the history. Default "en" if uncertain or message is too short to determine.

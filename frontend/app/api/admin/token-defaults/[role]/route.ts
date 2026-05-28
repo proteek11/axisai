@@ -1,0 +1,18 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { apiRequest } from '@/lib/api/client';
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { role: string } }
+) {
+  const cookieStore = cookies();
+  const accessToken = cookieStore.get('axis_access')?.value;
+  const body = await req.json();
+  const data = await apiRequest(`/api/v1/admin/token-defaults/${params.role}`, {
+    method: 'PUT',
+    body: body,
+    jwtToken: accessToken,
+  });
+  return NextResponse.json(data);
+}

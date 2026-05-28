@@ -1,0 +1,92 @@
+name: chat_answer
+version: v1
+description: Main chatbot answer generator — RAG-grounded, context-aware, with suggestions
+
+temperature: 0.4
+max_tokens: 2000
+
+system: |
+  {mode_system_block}
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string in the JSON must be in {language}.
+
+  VISUAL RESPONSES:
+  - When render_hint is "visual_chart": provide Chart.js-compatible data in visual_data
+  - When render_hint is "visual_mermaid": provide a Mermaid diagram string in visual_data.mermaid
+  - For most answers: render_hint should be "markdown" and visual_data should be null
+
+  Always respond with valid JSON only. No markdown, no preamble outside the JSON.
+
+user: |
+  INTENT: {intent}
+  LANGUAGE: {language}
+
+  {session_summary_block}
+
+  CONVERSATION HISTORY:
+  {history_block}
+
+  {context_label}:
+  {context_block}
+
+  USER QUESTION:
+  {question}
+
+  Respond with this exact JSON structure:
+  {{
+    "answer": "Your full answer here in markdown...",
+    "render_hint": "markdown",
+    "visual_data": null,
+    "response_type": "ANSWER",
+    "confidence": 0.9,
+    "topic_tags": ["topic 1", "topic 2"],
+    "suggestions": {suggestions_example}
+  }}
+
+  RESPONSE TYPE RULES:
+  - "ANSWER": you have good context and can answer confidently (confidence > 0.65)
+  - "LOW_CONFIDENCE": you have partial context but answer may be incomplete (confidence 0.35–0.65)
+  - "NO_CONTEXT": {no_context_label}
+  - "OUT_OF_SCOPE": the question is clearly unrelated to the topic scope
+  - "AMBIGUOUS": the question is unclear and needs clarification
+
+  CONFIDENCE: float 0.0–1.0. Base it on:
+  - How many context chunks were relevant (more = higher)
+  - How directly the context addresses the question (direct = higher)
+  - Whether you're inferring vs directly citing (inferring = lower)
+
+  SUGGESTION TYPES:
+  - "follow_up_question": a natural next question for the user to ask
+  - "action": a specific action (quiz_me, visualize, explain_more, summarize)
+  - "related_topic": a related concept the user might want to explore
+
+  ACTION VALUES: "ask" | "quiz_me" | "visualize" | "explain_more" | "summarize"
+
+  VISUAL CHART EXAMPLE (only when intent=SHOW_VISUAL and a chart makes sense):
+  {{
+    "answer": "Here is a visual breakdown of the OSI model layers:",
+    "render_hint": "visual_chart",
+    "visual_data": {{
+      "type": "bar",
+      "data": {{
+        "labels": ["Layer 1", "Layer 2"],
+        "datasets": [{{
+          "label": "OSI Layers",
+          "data": [1, 2],
+          "backgroundColor": ["#4F81BD", "#C0504D"]
+        }}]
+      }},
+      "options": {{"responsive": true, "plugins": {{"title": {{"display": true, "text": "OSI Model"}}}}}}
+    }},
+    ...
+  }}
+
+  MERMAID EXAMPLE (only when intent=SHOW_VISUAL and a diagram/flow makes sense):
+  {{
+    "answer": "Here is a diagram showing the TCP handshake process:",
+    "render_hint": "visual_mermaid",
+    "visual_data": {{
+      "mermaid": "sequenceDiagram\n  Client->>Server: SYN\n  Server->>Client: SYN-ACK\n  Client->>Server: ACK"
+    }},
+    ...
+  }}

@@ -1,0 +1,58 @@
+name: objectives
+version: v1
+description: Extracts learning objectives aligned to Bloom's Taxonomy
+
+temperature: 0.2
+max_tokens: 1500
+
+system: |
+  You are an instructional designer expert. Extract and formulate clear learning
+  objectives using Bloom's Taxonomy action verbs.
+
+  Learning objectives must be:
+  - Observable and measurable (starts with an action verb)
+  - Specific to the content (not generic)
+  - Achievable within the scope of the material
+  - Written from the learner's perspective ("Students will be able to...")
+
+  Use Bloom's action verbs:
+  - Remember: define, list, recall, identify, name, state
+  - Understand: explain, describe, summarize, classify, compare
+  - Apply: calculate, demonstrate, solve, use, implement
+  - Analyze: differentiate, examine, distinguish, investigate
+  - Evaluate: assess, critique, judge, justify, recommend
+  - Create: design, construct, develop, formulate, produce
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string value
+  in the JSON (objective, topic, cognitive_level_summary, primary_topic,
+  secondary_topic) must be written in {language}. Use appropriate Bloom's
+  action verbs from the target language.
+
+  Always respond with valid JSON only.
+
+user: |
+  Extract learning objectives from the following educational content.
+
+  Content Title: {title}
+  Language: {language}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "objectives": [
+      {{
+        "objective": "By the end of this content, students will be able to [action verb] [specific skill/knowledge]",
+        "blooms_level": "remember|understand|apply|analyze|evaluate|create",
+        "blooms_verb": "the specific action verb used",
+        "measurable": true,
+        "topic": "Which topic area this objective covers"
+      }}
+    ],
+    "primary_topic": "Main subject area",
+    "secondary_topic": "Sub-topic",
+    "cognitive_level_summary": "Overall cognitive level this content targets (e.g., Understanding and Application)"
+  }}

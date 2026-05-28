@@ -1,0 +1,256 @@
+PDF TESTING
+
+curl -X POST http://127.0.0.1:8000/api/v1/ingest \
+  -H "Authorization: Bearer dev-master-key-change-in-production" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_url": "https://grow.lmsatwork.com/coursesample/scorm-table.pdf",
+    "content_type": "pdf",
+    "moodle_course_id": 101,
+    "moodle_cmid": 999,
+    "title": "My Test PDF",
+    "options": {
+      "tasks": ["summary", "flashcards", "quiz"]
+    }
+  }'
+
+Response gives you two ids
+  {
+  "content_item_id": "xxxxxxxx-...",
+  "job_id": "yyyyyyyy-...",
+  "status": "queued"
+}
+{"content_item_id":"21bb0052-c080-4501-be71-43385b6b629f",
+"job_id":"ed0d9519-0e00-410a-aa54-87e7dce9a526","status":
+"queued","message":"Job queued. Poll /api/v1/jobs/ed0d9519-0e00-410a-aa54-87e7dce9a526 for status."}%  
+
+{"content_item_id":"21bb0052-c080-4501-be71-43385b6b629f","job_id":"29a9d90a-cc94-40c1-a30a-174631d253cc","status":"queued","message":"Job queued. Poll /api/v1/jobs/29a9d90a-cc94-40c1-a30a-174631d253cc for status."}%   
+
+Step 3 — Poll the job until complete
+
+curl http://127.0.0.1:8000/api/v1/jobs/29a9d90a-cc94-40c1-a30a-174631d253cc \
+  -H "Authorization: Bearer dev-master-key-change-in-production"
+
+
+Then you can monitor item
+watch -n 3 'curl -s http://127.0.0.1:8000/api/v1/jobs/29a9d90a-cc94-40c1-a30a-174631d253cc \
+  -H "Authorization: Bearer dev-master-key-change-in-production" | python3 -m json.tool'
+
+  OR using this
+
+  curl -s http://127.0.0.1:8000/api/v1/jobs/29a9d90a-cc94-40c1-a30a-174631d253cc \
+  -H "Authorization: Bearer dev-master-key-change-in-production" | python3 -m json.tool
+
+
+  {
+    "job_id": "29a9d90a-cc94-40c1-a30a-174631d253cc",
+    "content_item_id": "21bb0052-c080-4501-be71-43385b6b629f",
+    "status": "completed",
+    "progress": 100,
+    "progress_message": "All outputs generated",
+    "job_type": "full_pipeline",
+    "error_message": null,
+    "started_at": "2026-03-28T03:32:12.166662+00:00",
+    "completed_at": "2026-03-28T03:33:03.575522+00:00",
+    "created_at": "2026-03-28T03:32:09.100103Z"
+}
+
+
+  Step 4 — Fetch the AI outputs from the API
+
+  # Summary
+curl "http://127.0.0.1:8000/api/v1/content/21bb0052-c080-4501-be71-43385b6b629f/summary" \
+  -H "Authorization: Bearer dev-master-key-change-in-production"
+
+# Flashcards
+curl "http://127.0.0.1:8000/api/v1/content/21bb0052-c080-4501-be71-43385b6b629f/flashcards" \
+  -H "Authorization: Bearer dev-master-key-change-in-production"
+
+# Quiz
+curl "http://127.0.0.1:8000/api/v1/content/21bb0052-c080-4501-be71-43385b6b629f/quiz" \
+  -H "Authorization: Bearer dev-master-key-change-in-production"
+
+# All outputs at once
+curl "http://127.0.0.1:8000/api/v1/content/21bb0052-c080-4501-be71-43385b6b629f/outputs" \
+  -H "Authorization: Bearer dev-master-key-change-in-production"
+
+
+  Step 5 — Check PostgreSQL directly
+
+  -- Check the content item was created and its status
+SELECT id, title, status, content_type, created_at 
+FROM content_items 
+ORDER BY created_at DESC LIMIT 5;
+
+-- Check the job status and progress
+SELECT id, status, progress, progress_message, error_message, started_at, completed_at 
+FROM processing_jobs 
+ORDER BY created_at DESC LIMIT 5;
+
+-- Check generated outputs (summary, flashcards, quiz, etc.)
+SELECT output_type, language, status, prompt_tokens, completion_tokens, created_at 
+FROM ai_outputs 
+ORDER BY created_at DESC LIMIT 10;
+
+-- Check what chunks were stored (count per content item)
+SELECT content_item_id, COUNT(*) as chunk_count 
+FROM content_chunks 
+GROUP BY content_item_id;
+
+
+Step 6 — Check Qdrant
+
+Option A — Browser UI (easiest):
+Go to http://localhost:6333/dashboard — you'll see all four collections and can browse vectors visually.
+
+OR VIA curl
+# List all collections and point counts
+curl http://localhost:6333/collections
+
+# Check how many vectors are in the content chunks collection
+curl http://localhost:6333/collections/axis_content_chunks
+
+# Browse the first few vectors (payload = metadata attached to each chunk)
+curl -X POST http://localhost:6333/collections/axis_content_chunks/points/scroll \
+  -H "Content-Type: application/json" \
+  -H "api-key: qdrantdev" \
+  -d '{
+    "limit": 5,
+    "with_payload": true,
+    "with_vector": false
+  }'
+
+  ##------------------------------------VIMEO TESTING-----------------------------------##
+  curl -s -X POST http://localhost:8000/api/v1/ingest \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_url": "https://vimeo.com/YOUR_VIDEO_ID",
+    "content_type": "vimeo",
+    "moodle_course_id": 101,
+    "moodle_cmid": 9001,
+    "title": "Test Vimeo Video",
+    "options": {
+      "tasks": ["summary", "flashcards"],
+      "language": "en"
+    },
+    "metadata": {
+      "vimeo_token": "YOUR_VIMEO_TOKEN"
+    }
+  }' | python3 -m json.tool
+
+{
+    "content_item_id": "b892c4aa-d527-4146-8513-ffcb4f72abc8",
+    "job_id": "08c339cd-73fa-441a-9957-716592317363",
+    "status": "queued",
+    "message": "Job queued. Poll /api/v1/jobs/08c339cd-73fa-441a-9957-716592317363 for status."
+}
+
+Then monitor 
+curl -s http://localhost:8000/api/v1/jobs/08c339cd-73fa-441a-9957-716592317363 \
+  -H "Authorization: Bearer dev-master-key-change-in-production" | python3 -m json.tool
+
+
+  ## for processing task temporary command
+
+  -- Connect
+psql postgresql://axis:axisdev@localhost:5432/axis_ai
+
+-- Reset the stuck content item
+UPDATE content_items
+SET status = 'pending'
+WHERE id = 'b892c4aa-d527-4146-8513-ffcb4f72abc8';
+
+-- Also mark the old failed job cleanly (optional but tidy)
+UPDATE processing_jobs
+SET status = 'failed', error_message = 'Reset manually after stuck processing state'
+WHERE content_item_id = 'b892c4aa-d527-4146-8513-ffcb4f72abc8'
+  AND status IN ('queued', 'processing');
+
+   ########################## PAGE with EMBED VIDEO CONTENT ############################
+  # 1. Plain text page (fastest — no video):
+python scripts/test_page.py --key dev-master-key-change-in-production
+
+# 2. Page with embedded YouTube:
+python scripts/test_page.py --key axai_YOUR_KEY --with-youtube
+
+# 3. Page with embedded Vimeo:
+python scripts/test_page.py --key axai_YOUR_KEY --with-vimeo
+
+# 4. Both embedded (tests the full merge):
+python scripts/test_page.py --key axai_YOUR_KEY --with-youtube --with-vimeo
+
+# 5. Full output payloads:
+python scripts/test_page.py --key axai_YOUR_KEY --with-youtube --verbose
+
+# 6. Custom HTML (paste your own Moodle page content):
+python scripts/test_page.py --key axai_YOUR_KEY \
+  --html "<h2>My Topic</h2><p>Content...</p><iframe src='https://www.youtube.com/embed/VIDEO_ID'></iframe>"
+
+# 7. Test change detection — run #1 again (same cmid=8001), should get status: ready
+python scripts/test_page.py --key axai_YOUR_KEY
+
+#################################### PEERTUBE TESTING #############################
+curl -s -X POST http://localhost:8000/api/v1/ingest \
+  -H "Authorization: Bearer dev-master-key-change-in-production" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_url": "https://openmedia.edunova.it/w/c3LtgepcoRqE2fHMaRoays",
+    "content_type": "peertube",
+    "moodle_course_id": 101,
+    "moodle_cmid": 9003,
+    "title": "Test PeerTube Video",
+    "options": {
+      "tasks": ["summary", "flashcards"],
+      "language": "en"
+    },
+    "metadata": {}
+  }' | python3 -m json.tool
+
+    curl -s http://127.0.0.1:8000/api/v1/jobs/984806ce-a0a6-4276-86f7-deb7769445f3 \
+  -H "Authorization: Bearer dev-master-key-change-in-production" | python3 -m json.tool
+
+
+################### INFOGRAPHICS #######################
+  python scripts/test_faq_infographic.py \
+  --key "your-api-key" \
+  --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
+  --content-type video_link \
+  --faq-count 8
+
+Use an existing content item (skip re-ingest)
+
+  python scripts/test_faq_infographic.py \
+  --key "axisai_72_05wyTslb46owBbdTcKdQ_1A8_DZMhHzeKzUBPHME" \
+  --content-item-id "235ff5b2-0392-48d3-873d-f8ea5c5eb4a6"
+
+  python scripts/test_faq_infographic.py \
+  --key "axisai_72_05wyTslb46owBbdTcKdQ_1A8_DZMhHzeKzUBPHME" \
+  --content-item-id "235ff5b2-0392-48d3-873d-f8ea5c5eb4a6"
+
+  ### with watch
+docker logs axis_api -f --tail 5 &
+python scripts/test_faq_infographic.py \
+  --key "axisai_72_05wyTslb46owBbdTcKdQ_1A8_DZMhHzeKzUBPHME" \
+  --content-item-id "235ff5b2-0392-48d3-873d-f8ea5c5eb4a6"
+
+
+================================================
+MOODLE SIDE DEBUGGING
+
+curl -H "Authorization: Bearer axisai_72_05wyTslb46owBbdTcKdQ_1A8_DZMhHzeKzUBPHME" \
+  "http://localhost:8000/api/v1/admin/qdrant/debug"
+
+Check with the specific content_item_id from Moodle's local_edzaiaxisfront_cm_config.axis_content_item_id:
+
+  curl -H "Authorization: Bearer axisai_72_05wyTslb46owBbdTcKdQ_1A8_DZMhHzeKzUBPHME" \
+  "http://localhost:8000/api/v1/admin/qdrant/debug?content_item_id=1c6895f9-5845-449c-97f2-776e1d64c37f"
+
+  ======
+  docker compose restart celery
+
+  # Restart just the celery service inside Docker
+docker compose restart celery
+
+# OR if you know the container name
+docker exec 004b2e19d1a5 pkill -HUP -f "celery worker"

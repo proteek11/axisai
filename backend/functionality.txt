@@ -1,0 +1,372 @@
+axis-ai — Functionality Summary
+=================================
+Last updated: April 2026
+
+
+WHAT IS AXIS-AI?
+----------------
+axis-ai is a Python AI microservice that plugs into Moodle LMS. Moodle handles
+all user authentication, enrolment checks, and front-end display. axis-ai handles
+everything AI: content ingestion, processing, transcript extraction, AI output
+generation, and intelligent chat. The two systems communicate via a secure REST
+API using tenant-scoped API keys.
+
+The Moodle plugin (local_edzaiaxisfront) is the integration layer — it handles
+content detection, payload construction, job polling, and student-facing display.
+
+
+PHASE 1 — CORE INFRASTRUCTURE
+------------------------------
+- Multi-tenant API with per-tenant API key authentication (SHA-256 hashed)
+- Tenant management: create/suspend/delete tenants, issue and revoke API keys
+- Health check endpoint (DB + Redis + Qdrant connectivity)
+- Structured JSON logging (structlog) with request_id tracing on every line
+- Rate limiting (Redis Lua sliding-window scripts, atomic, fail-open)
+- PostgreSQL database with fully async SQLAlchemy 2.0 (asyncpg driver)
+- Alembic migration system (versioned, applied on container startup)
+- Celery async task queue backed by Redis for all heavy processing
+- Docker Compose local dev environment
+
+
+PHASE 2 — CONTENT INGESTION
+-----------------------------
+Ingestion converts Moodle course material into AI-ready chunks stored in a
+vector database for retrieval.
+
+Supported content types (ContentType enum):
+  - pdf          PDF documents (from mod_resource or mod_url)
+  - youtube      YouTube videos (transcript via yt-dlp / captions API)
+  - vimeo        Vimeo videos (transcript via Vimeo API, token required)
+  - peertube     PeerTube self-hosted videos
+  - html_page    Moodle Page modules (HTML sent in metadata) or generic
+                 external URLs (fetched with httpx URL-fetch fallback)
+  - scorm        SCORM packages (pre-extracted by Moodle PHP, sent as chunks)
+  - h5p          H5P interactive content (pre-extracted by Moodle PHP)
+
+Two ingest endpoints:
+  POST /api/v1/ingest              — URL-based ingest (pdf, video, html_page)
+  POST /api/v1/ingest/structured   — Pre-extracted chunks (scorm, h5p, book)
+  POST /api/v1/ingest/file         — Binary file upload (PDF direct upload)
+
+Ingestion pipeline (Celery task):
+  1. Validate content type + tenant
+  2. Check for existing ContentItem (same tenant + cmid) — skip if unchanged
+  3. Extract raw text via type-specific extractor
+  4. Auto-detect source language (or accept hint from Moodle)
+  5. Save ExtractedContent to DB
+  6. Save Transcript records (video types only — all language tracks)
+  7. Chunk text (recursive / token / semantic strategy, configurable)
+  8. Embed chunks (OpenAI text-embedding-3-small, Redis-cached)
+  9. Upsert vectors to Qdrant
+  10. Run requested AI output generators in parallel
+
+Content extractors:
+  PDFExtractor         Extracts text page-by-page via pdfplumber
+  YouTubeExtractor     yt-dlp captions → multilingual transcript tracks
+  VimeoExtractor       Vimeo API text tracks (requires Vimeo access token)
+  PeerTubeExtractor    PeerTube API captions
+  MoodlePageExtractor  Mode A: HTML from metadata (mod_page, with iframe
+                       video detection for embedded YouTube/Vimeo);
+                       Mode B: httpx URL fetch fallback (mod_url web pages)
+
+Change detection:
+  - Video/PDF: source_url hash (same URL = same content)
+  - html_page: SHA-256 of html_content body (URL stays same when teacher edits)
+  - If hash differs: mark STALE, reprocess
+
+
+PHASE 3 — AI OUTPUT GENERATION
+--------------------------------
+On-demand AI generation for multiple learning aid types. All results are stored
+in ai_outputs (with prompt versioning — old outputs become SUPERSEDED when
+regenerated, never deleted). Pool-based types also write to dedicated tables.
+
+Output types (OutputType enum):
+
+1. SUMMARY
+   Concise narrative summary. Configurable length. Plain text.
+
+2. GLOSSARY  [pool-based — glossary_terms table]
+   Key terms and definitions extracted from content.
+   Pool: individual terms can be added/removed/edited by teachers.
+   Returns {term, definition, context_note} objects.
+
+3. FLASHCARDS  [pool-based — flashcard_items table]
+   Question/answer pairs for active recall. Configurable count.
+   Pool: cards can be added/removed/edited; regenerate adds more to pool.
+   Returns {front, back} pairs.
+
+4. QUIZ  [pool-based — quiz_questions table]
+   Practice questions with answers. Configurable count + difficulty.
+   Question types: multichoice, truefalse, shortanswer, essay, matching.
+   Bloom's Taxonomy distribution configurable per generation.
+   Pool: questions can be added/removed/edited by teachers.
+   Returns {question_text, answer, options_json, blooms_level, difficulty}.
+
+5. FAQ
+   Most likely student questions with answers.
+   Returns {question, answer, topic, difficulty} objects.
+
+6. INFOGRAPHIC
+   Visual HTML summary — self-contained HTML document in payload.
+   Also served as raw HTML via GET /content/{id}/infographic/html.
+
+7. CHAPTERS
+   AI-generated video chapter markers with timestamps.
+   Only for video content (requires timed transcript segments).
+   Returns {title, start_sec, end_sec, summary} per chapter.
+
+8. MINDMAP (planned output, generator exists)
+9. OBJECTIVES (planned output, generator exists)
+10. BLOOMS (planned output, generator exists)
+
+Prompt versioning (Option A):
+  When a new output is generated, old ACTIVE outputs for that type + language
+  are marked SUPERSEDED. Teachers can see the latest; history is preserved.
+
+On-demand regeneration:
+  POST /content/{id}/generate  {tasks: [...], options: {...}}
+  Queues a new Celery job for specific output types without re-extracting.
+
+
+PHASE 4 — TRANSCRIPT STORAGE AND RETRIEVAL
+-------------------------------------------
+Transcripts are stored in a dedicated transcripts table (separate from
+ai_outputs) with per-language rows.
+
+  GET /api/v1/content/{id}/transcript   — fetched timed segments for display
+  GET /api/v1/content/{id}/chapters     — AI chapter markers with timestamps
+
+Transcript sources (TranscriptSource enum):
+  API_CAPTIONS    Native captions from YouTube/Vimeo API or yt-dlp
+  WHISPER_LOCAL   Locally-run Whisper ASR
+  WHISPER_API     OpenAI Whisper API
+  MANUAL          Manually uploaded/edited transcript
+
+Multilingual: YouTube extractors return all available caption language tracks.
+Each language is a separate Transcript row (UNIQUE content_item_id + language).
+Moodle polls GET /transcript to sync the transcript into its local DB for
+student display.
+
+
+PHASE 5 — TEACHER CONTENT MANAGEMENT (CRUD)
+--------------------------------------------
+Teachers can manage pool-based outputs via dedicated CRUD endpoints.
+
+Summary:
+  GET    /content/{id}/summary          View current summary
+  PUT    /content/{id}/summary          Edit / override summary text
+
+Glossary:
+  GET    /content/{id}/glossary         Full term pool
+  GET    /content/{id}/glossary/terms   Paginated term list
+  PUT    /content/{id}/glossary/terms/{term_id}   Edit a term
+  DELETE /content/{id}/glossary/terms/{term_id}   Remove a term
+
+Flashcards:
+  GET    /content/{id}/flashcards                  Full card pool
+  POST   /content/{id}/flashcards                  Add card manually
+  PUT    /content/{id}/flashcards/{id}             Edit a card
+  DELETE /content/{id}/flashcards/{id}             Remove a card
+  POST   /content/{id}/flashcards/regenerate       Add more cards to pool
+
+Quiz questions:
+  GET    /content/{id}/quiz-questions              Full question pool
+  POST   /content/{id}/quiz-questions              Add question manually
+  PUT    /content/{id}/quiz-questions/{id}         Edit a question
+  DELETE /content/{id}/quiz-questions/{id}         Remove a question
+  POST   /content/{id}/quiz-questions/regenerate   Add more questions
+
+teacher-edited flag: PUT/PATCH on any output sets is_teacher_edited = True.
+All GET endpoints return the teacher-edited version if one exists.
+
+
+PHASE 6 — CONVERSATIONAL CHAT (RAG-BACKED)
+--------------------------------------------
+Students can have a multi-turn conversation with an AI tutor that knows
+the course content (study mode) or query a site-wide knowledge base
+(support mode).
+
+Chat modes:
+  study     — scoped to a content item (cmid); RAG over that item's chunks
+              in the axis_content_chunks Qdrant collection
+  support   — scoped to KB items; RAG over axis_kb_chunks Qdrant collection;
+              KB-strict: only answers from KB articles, no internet/inference
+  learning  — broader course-level scope (planned)
+
+Session management:
+  - Sessions are scoped to user + mode (+ cmid for study mode)
+  - Sessions auto-expire after 4 hours of inactivity
+  - Full history persisted to DB for UI restore on page reload
+  - Moodle records session in local DB with axis session_id for token tracking
+
+RAG retrieval:
+  - User message → intent classifier extracts rephrased query + topic tags
+  - Rephrased query embedded → Qdrant search (tenant + course/KB scoped)
+  - Continuity bias: if follow-up detected, prior chunk IDs boosted in ranking
+  - Top chunks assembled into LLM context
+  - Sources cited in response (chunk title + relevance score)
+  - Support mode Qdrant filter: must_not is_active=False (includes chunks where
+    is_active is True OR where the field does not exist — backward compatible
+    with chunks ingested before the is_active payload field was added)
+
+Mode-specific prompt behaviour:
+  study mode:
+    - System block instructs AI to teach from course content
+    - Suggestions may include quiz_me, visualize, explain_more, etc.
+    - NO_CONTEXT fallback: "I couldn't find specific information about that
+      in the course material."
+
+  support mode:
+    - System block instructs AI to answer ONLY from KB articles
+    - NEVER infer or invent information not present in KB context
+    - If KB has no answer: respond NO_CONTEXT, direct user to contact support
+    - Suggestions: follow-up questions only — quiz_me and visualize are
+      explicitly excluded from the LLM prompt AND filtered out by the
+      orchestrator before returning the response
+    - NO_CONTEXT fallback: "I couldn't find information about that in our
+      knowledge base. Please try rephrasing, or contact our support team."
+
+Intent classification (8 intents):
+  GENERAL_QUESTION / EXPLAIN_MORE / GIVE_EXAMPLES / QUIZ_ME /
+  SHOW_VISUAL / SUMMARIZE / COMPARE / FOLLOW_UP
+
+Response types (6 types):
+  ANSWER / LOW_CONFIDENCE / NO_CONTEXT / OUT_OF_SCOPE / AMBIGUOUS / ERROR
+
+Security layers:
+  1. Input sanitization — NFKC normalization, control char stripping,
+     length cap (3000 chars), prompt injection scoring (16 weighted patterns)
+  2. Per-user cooldown — 2-second Redis TTL prevents rapid-fire spam
+  3. Session message cap — configurable per tenant, default 100
+  4. Daily / monthly limits — configurable per user and per tenant
+     (rate_limit_rules table; user-level overrides via user_token_overrides)
+
+Audit logging:
+  - Every message: intent, response_type, confidence, latency, tokens
+  - RAG stats: chunks retrieved, chunks used in final context
+  - UserLearningEvent table: immutable log per turn (foundation for Phase 7)
+  - Session events: SESSION_START, SESSION_END
+
+Learning event types:
+  ASKED / ASKED_EXPLAIN / ASKED_VISUAL / ASKED_QUIZ / SUGGESTION_CLICKED /
+  NO_CONTEXT / LOW_CONFIDENCE / SESSION_START / SESSION_END
+
+
+PHASE 7 — KNOWLEDGE BASE (SUPPORT CHAT)
+-----------------------------------------
+Separate KB collection in Qdrant (axis_kb_chunks) for site-wide support
+content. KB items are ingested by admins via the Moodle plugin's KB admin page.
+
+Ingest methods:
+  POST /api/v1/kb/ingest          — ingest by URL (async fetch + scrape)
+  POST /api/v1/kb/ingest/text     — ingest from plain text (inline_text in body)
+  POST /api/v1/kb/ingest/base64   — ingest from base64-encoded file (PDF, DOCX,
+                                    TXT); Moodle reads the file client-side and
+                                    sends base64 — no Moodle file system access
+                                    required
+  POST /api/v1/kb/ingest/file     — ingest KB item from multipart file upload
+  All three text/file endpoints also accept POST to /api/v1/kb/ingest with
+  the appropriate body shape (add_api_route aliases).
+
+Document types (doc_type field — passed through all layers):
+  support / policy / how_to / faq / announcement / other
+  Stored on the KB item, embedded in Qdrant chunk payload, used for
+  filtering and display in the Moodle admin panel.
+
+Item management:
+  GET    /api/v1/kb/items            — list all KB items for tenant (includes
+                                       stored content field for edit modal)
+  GET    /api/v1/kb/items/{id}       — item detail
+  PUT    /api/v1/kb/items/{id}       — toggle is_active (enable/disable)
+  POST   /api/v1/kb/items/{id}/delete — remove from DB + Qdrant (also accepts
+                                        DELETE /api/v1/kb/items/{id})
+  POST   /api/v1/kb/items/{id}/reindex — re-queue a Celery indexing job for an
+                                         existing item with updated text/title/
+                                         doc_type; preserves the same UUID so
+                                         Moodle axis_kb_item_id stays valid;
+                                         old Qdrant vectors are deleted before
+                                         new ones are inserted
+
+Backfill utility:
+  POST /api/v1/kb/backfill-active   — iterates all active+ready KB items for
+                                      the tenant and stamps is_active=True on
+                                      their Qdrant chunk payloads; fixes older
+                                      items ingested before is_active was added
+                                      to the chunk upsert logic
+
+Qdrant filter behaviour:
+  Support chat uses must_not: is_active=False rather than must: is_active=True.
+  This means chunks are included if is_active is True OR if the field is absent
+  (older items). Only explicitly deactivated items (is_active=False) are
+  excluded. This makes retrieval backward-compatible with pre-existing data.
+
+KB Celery task (process_kb):
+  1. Load KBItem + ProcessingJob from DB
+  2. Fetch/extract text (URL scrape, or inline_text from job_config)
+  3. Chunk text
+  4. Embed chunks (same embedder as course content)
+  5. Delete existing Qdrant vectors for this kb_item_id (clean reindex)
+  6. Upsert new chunk vectors with payload:
+     {tenant_id, kb_item_id, doc_type, title, language, chunk_index,
+      chunk_hash, content_hash, text, is_active}
+  7. Mark KBItem status=ready, job COMPLETED
+
+Support chat sessions use the same chat infrastructure (orchestrator, builder,
+parser, retriever) as study mode. The chat_mode field on the session record
+determines which Qdrant collection is queried and which prompt block is used.
+
+
+PHASE 8 — ADMIN & REPORTING
+-----------------------------
+  GET /api/v1/admin/tenants             — list all tenants
+  GET /api/v1/admin/tenants/{id}        — tenant detail
+  PUT /api/v1/admin/tenants/{id}        — update tenant limits / settings
+  PUT /api/v1/admin/tenants/{id}/status — activate / suspend tenant
+
+Token usage tracking:
+  - ai_outputs: prompt_tokens + completion_tokens per generation
+  - chat_messages: tokens_prompt + tokens_completion per message
+  - user_token_overrides: per-user rate limit overrides (set by admins in Moodle)
+  - AuditLog table: structured change log for admin actions
+
+
+WHAT MOODLE CONTROLS (vs. what axis-ai controls)
+--------------------------------------------------
+Moodle controls:
+  - User authentication and session management
+  - Enrolment and capability checks before any API call
+  - All display copy (error messages, labels, UI strings via lang files)
+  - Rendering of flashcards, quiz, FAQ accordion, transcript, etc.
+  - Polling job status and writing axis data to local DB tables
+  - When and where to call axis-ai endpoints
+
+axis-ai controls:
+  - All AI logic and LLM calls (via LiteLLM gateway)
+  - Content extraction, chunking, embedding, vector storage
+  - Transcript storage and multilingual track management
+  - Response quality classification (response_type)
+  - RAG retrieval and context assembly
+  - Token usage and cost tracking
+  - Rate limiting and abuse prevention
+  - All long-term data persistence (content, sessions, events, outputs)
+
+
+CONTENT TYPE ALIGNMENT (Moodle ↔ axis-ai)
+-------------------------------------------
+Moodle mod_type     PHP content_router    axis-ai content_type
+-----------         ------------------    --------------------
+resource (PDF)      pdf                   pdf
+resource (video)    pdf or video          pdf
+url (YouTube)       youtube               youtube
+url (Vimeo)         vimeo                 vimeo
+url (generic web)   html_page             html_page  [URL fetch mode]
+page                html_page             html_page  [html_content in metadata]
+book                book → structured     scorm (StructuredIngestRequest)
+scorm               scorm → structured    scorm (StructuredIngestRequest)
+videotime           vimeo                 vimeo
+h5p/hvp             h5p → structured      h5p (StructuredIngestRequest)
+
+Key rule: content_type "html_page" maps to MoodlePageExtractor which handles
+both mod_page (HTML body in metadata["html_content"]) and mod_url generic web
+pages (httpx URL fetch fallback when html_content is absent).

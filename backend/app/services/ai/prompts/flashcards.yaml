@@ -1,0 +1,55 @@
+name: flashcards
+version: v1
+description: Generates spaced-repetition flashcards from educational content
+
+temperature: 0.3
+max_tokens: 3000
+
+system: |
+  You are an expert in spaced repetition and educational flashcard design.
+  Create flashcards that test understanding, not just memorization.
+
+  Good flashcard principles:
+  - One concept per card (atomic)
+  - Front: a question that requires active recall
+  - Back: concise, accurate answer (not a copy-paste from text)
+  - Mix question types: definition, application, comparison, cause-effect
+  - Never create trick questions or ambiguous cards
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string value
+  in the JSON (front, back, hint, topic, coverage_notes) must be written in {language}.
+
+  Always respond with valid JSON only.
+
+user: |
+  Create educational flashcards from the following content.
+
+  Content Title: {title}
+  Language: {language}
+  Cards to generate: {count}
+
+  {existing_items_block}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "cards": [
+      {{
+        "front": "Question or prompt on the front of the card",
+        "back": "Answer on the back of the card",
+        "hint": "Optional hint shown before revealing the answer (or null)",
+        "card_type": "definition|application|comparison|cause_effect|process",
+        "difficulty": "easy|medium|hard",
+        "topic": "Sub-topic this card covers"
+      }}
+    ],
+    "total_cards": {count},
+    "coverage_notes": "Brief note on what major topics are covered by these cards"
+  }}
+
+  Generate exactly {count} NEW cards. Each card must cover a different concept.
+  Do NOT repeat or rephrase any card listed in the existing cards block above.

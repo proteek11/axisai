@@ -1,0 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── EDZLMS Brand CSS Variables ──────────────────────────────────────────── */
+:root {
+  /* Base colors — warm, never pure cool gray */
+  --background: 0 0% 100%;
+  --foreground: 300 14% 5%;        /* #0c090c warm near-black */
+
+  --card: 0 0% 100%;
+  --card-foreground: 300 14% 5%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 300 14% 5%;
+
+  /* Brand blue — the ONE strong color */
+  --primary: 223 84% 49%;          /* #1447e6 */
+  --primary-foreground: 214 100% 97%; /* #eff6ff */
+
+  --secondary: 300 6% 95%;         /* #f3f1f3 warm muted */
+  --secondary-foreground: 300 14% 5%;
+
+  --muted: 300 6% 95%;             /* #f3f1f3 */
+  --muted-foreground: 300 7% 45%;  /* #79697b warm purple-gray */
+
+  --accent: 300 6% 95%;
+  --accent-foreground: 300 14% 5%;
+
+  --destructive: 357 100% 45%;     /* #e7000b */
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 300 8% 91%;            /* #e7e4e7 */
+  --input: 300 8% 91%;
+  --ring: 223 84% 49%;
+
+  --radius: 0.875rem;              /* 14px — generous rounding */
+
+  /* Sidebar — calm, light */
+  --sidebar-background: 300 6% 97%;  /* #f8f6f8 */
+  --sidebar-foreground: 300 14% 5%;
+  --sidebar-primary: 223 97% 54%;    /* #155dfc */
+  --sidebar-primary-foreground: 214 100% 97%;
+  --sidebar-accent: 300 10% 93%;     /* #ede9f0 */
+  --sidebar-border: 300 8% 91%;
+
+  /* Fonts */
+  --font-instrument-sans: 'Instrument Sans', sans-serif;
+  --font-geist-mono: 'Geist Mono', monospace;
+}
+
+.dark {
+  --background: 300 14% 5%;        /* #0c090c */
+  --foreground: 300 5% 98%;        /* #faf9fa */
+
+  --card: 300 12% 11%;             /* #1d161e */
+  --card-foreground: 300 5% 98%;
+
+  --popover: 300 12% 11%;
+  --popover-foreground: 300 5% 98%;
+
+  --primary: 228 73% 40%;          /* #193cb8 */
+  --primary-foreground: 214 100% 97%;
+
+  --secondary: 300 12% 15%;
+  --secondary-foreground: 300 5% 98%;
+
+  --muted: 300 12% 15%;            /* #2a212c */
+  --muted-foreground: 300 7% 62%;  /* #a392a6 */
+
+  --accent: 300 12% 15%;
+  --accent-foreground: 300 5% 98%;
+
+  --destructive: 357 100% 45%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 300 11% 21%;           /* #3a2e3c */
+  --input: 300 11% 21%;
+  --ring: 228 73% 40%;
+
+  --sidebar-background: 300 14% 8%; /* #140f15 */
+  --sidebar-foreground: 300 5% 98%;
+  --sidebar-primary: 218 100% 60%;  /* #3080ff */
+  --sidebar-primary-foreground: 214 100% 97%;
+  --sidebar-accent: 300 11% 21%;
+  --sidebar-border: 300 14% 14%;
+}
+
+/* ── Base resets ─────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  border-color: hsl(var(--border));
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-instrument-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar (subtle, warm) ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* ── Focus ring ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* ── Flashcard 3D flip ──────────────────────────────────────────────────── */
+.flashcard-scene {
+  perspective: 1000px;
+}
+.flashcard-card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.flashcard-card.flipped {
+  transform: rotateY(180deg);
+}
+.flashcard-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--radius);
+}
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+
+/* ── Job status progress ring ───────────────────────────────────────────── */
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.5s ease;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+/* ── Infographic iframe ─────────────────────────────────────────────────── */
+.infographic-frame {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 400px;
+}
+
+/* ── Skeleton shimmer ───────────────────────────────────────────────────── */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--background) / 0.4),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────────── */
+.page-padding {
+  @apply px-6 py-6;
+}
+
+.section-label {
+  @apply text-xs font-semibold uppercase tracking-widest text-muted-foreground;
+}
+
+.stat-number {
+  @apply text-4xl font-bold text-foreground;
+}
+
+.enterprise-card {
+  @apply bg-card border border-border rounded-[var(--radius)] p-5;
+}

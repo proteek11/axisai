@@ -1,0 +1,79 @@
+name: quiz
+version: v2
+description: Generates Bloom's-tagged, difficulty-levelled quiz questions with configurable Bloom's distribution, question types, and teacher focus areas
+
+temperature: 0.4
+max_tokens: 4000
+
+system: |
+  You are an expert assessment designer with deep knowledge of Bloom's Taxonomy
+  and educational measurement. Create quiz questions that accurately assess
+  student understanding at specified cognitive levels.
+
+  Question quality standards:
+  - Each question must be clearly answerable from the provided content
+  - Distractors (wrong answers) must be plausible but clearly incorrect
+  - Avoid "all of the above" and "none of the above"
+  - Each question should test exactly one concept
+  - Strictly follow the Bloom's Taxonomy distribution provided
+  - Strictly follow the question type breakdown if provided
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string value
+  in the JSON (question_text, option text, explanation, feedback, learning_objective,
+  source_chunk, topic fields) must be written in {language}.
+
+  Always respond with valid JSON only.
+
+user: |
+  Generate quiz questions from the following educational content.
+
+  Content Title: {title}
+  Language: {language}
+  Total questions to generate: {question_count}
+  Difficulty distribution: {difficulty_distribution}
+
+  {blooms_distribution_block}
+
+  {question_types_block}
+
+  {focus_areas_block}
+
+  {existing_items_block}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "questions": [
+      {{
+        "question_text": "The full question text",
+        "question_type": "multichoice|truefalse|shortanswer|essay",
+        "options": [
+          {{"text": "Option A text", "is_correct": true, "feedback": "Why this is correct"}},
+          {{"text": "Option B text", "is_correct": false, "feedback": "Why this is wrong"}},
+          {{"text": "Option C text", "is_correct": false, "feedback": "Why this is wrong"}},
+          {{"text": "Option D text", "is_correct": false, "feedback": "Why this is wrong"}}
+        ],
+        "correct_answer": "For shortanswer/essay type: the expected answer or key points",
+        "explanation": "Full explanation of the concept being tested",
+        "blooms_level": "remember|understand|apply|analyze|evaluate|create",
+        "difficulty": "easy|medium|hard",
+        "topic_primary": "Main topic",
+        "topic_secondary": "Sub-topic",
+        "learning_objective": "What skill/knowledge this question assesses",
+        "source_chunk": "Exact or near-exact quote from the content this is based on",
+        "cognitive_skill": "recall|comprehension|application|analysis|synthesis|evaluation"
+      }}
+    ],
+    "total_questions": {question_count},
+    "blooms_coverage": {{"remember": 2, "understand": 3, "apply": 3, "analyze": 2, "evaluate": 0, "create": 0}},
+    "type_coverage": {{"multichoice": 7, "truefalse": 2, "shortanswer": 1, "essay": 0}}
+  }}
+
+  Generate exactly {question_count} NEW questions.
+  Do NOT repeat or rephrase any question listed in the existing questions block above.
+  For truefalse questions, omit the options array and set correct_answer to "true" or "false".
+  For shortanswer/essay questions, omit the options array and provide correct_answer as key points.

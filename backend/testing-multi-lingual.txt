@@ -1,0 +1,41 @@
+#################### PDF MULTI LINGUAL 
+# Run all 3 scenarios (auto-detect, same-language, translate to French)
+python scripts/test_multilingual_pdf.py --key dev-master-key-change-in-production
+
+# Just scenario C — English PDF → French outputs
+python scripts/test_multilingual_pdf.py --key dev-master-key-change-in-production --scenario c
+
+# Translate to a different language (e.g. German)
+python scripts/test_multilingual_pdf.py --key dev-master-key-change-in-production --scenario c --output-lang de
+
+# See full AI payloads
+python scripts/test_multilingual_pdf.py --key dev-master-key-change-in-production --verbose
+
+
+#################. VIMEO MULTI LINGUAL
+ 
+# Quickest — just scenario B (submit video, verify EN outputs)
+python scripts/test_multilingual_vimeo.py --key dev-master-key-change-in-production --url "https://vimeo.com/76979871"
+
+# Scenario C — English video → French summary/flashcards/glossary
+python scripts/test_multilingual_vimeo.py --key dev-master-key-change-in-production --url "https://vimeo.com/76979871" --scenario c
+
+# Private video with token
+python scripts/test_multilingual_vimeo.py --key dev-master-key-change-in-production --url "https://vimeo.com/YOUR_ID" --vimeo-token YOUR_TOKEN --scenario b
+
+# All scenarios (takes a while — 4 separate ingests)
+python scripts/test_multilingual_vimeo.py --key dev-master-key-change-in-production --url "..." --scenario all --verbose
+
+
+################### CHAPTERS IN VIDEO ########################################
+POST /api/v1/content/{id}/generate
+{ "tasks": ["chapters"], "language": "en" }
+```
+
+### How the learner uses it
+```
+GET /api/v1/content/{id}/chapters
+→ chapters[0].start_sec = 0.0,   title = "Introduction"
+→ chapters[1].start_sec = 185.0, title = "Core Concept Explained"
+→ ...
+// Frontend: onClick → videoPlayer.seek(chapter.start_sec)

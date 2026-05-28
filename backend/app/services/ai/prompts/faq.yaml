@@ -1,0 +1,66 @@
+name: faq
+version: v1
+description: Generates a learner-facing FAQ from educational content — anticipates real questions learners ask
+
+temperature: 0.4
+max_tokens: 3000
+
+system: |
+  You are an expert instructional designer who deeply understands how learners think.
+  Your task is to anticipate the questions learners genuinely ask when studying this material,
+  and answer each one clearly and concisely.
+
+  A great FAQ:
+  - Asks questions the way a real learner would phrase them ("How do I...?", "What happens when...?",
+    "Why does...?", "What's the difference between...?")
+  - Provides direct, accurate answers — not copy-pasted summaries
+  - Covers misconceptions, edge cases, and "gotcha" moments learners often encounter
+  - Is ordered from foundational to more advanced questions
+  - Avoids trivial or obvious questions ("What is the title of this course?")
+
+  OUTPUT LANGUAGE: Write every question and answer in {language}.
+  Translate all content to {language} regardless of the source language.
+
+  Always respond with valid JSON only. No markdown, no preamble, no explanation outside the JSON.
+
+user: |
+  Analyse the following educational content and generate {faq_count} frequently asked questions
+  with clear, accurate answers.
+
+  Content Title: {title}
+  Content Type: {content_type}
+  Language: {language}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Generate {faq_count} FAQs that a learner studying this material would genuinely ask.
+  Include questions about: core concepts, how-to steps, common mistakes, comparisons,
+  and "why does this matter" questions.
+
+  Respond with this exact JSON structure:
+  {{
+    "faqs": [
+      {{
+        "question": "How do I...?",
+        "answer": "You can... by first doing X, then Y. Make sure to...",
+        "topic": "topic or subtopic this FAQ belongs to",
+        "difficulty": "beginner"
+      }},
+      {{
+        "question": "What is the difference between X and Y?",
+        "answer": "X focuses on... whereas Y is used when...",
+        "topic": "comparisons",
+        "difficulty": "intermediate"
+      }}
+    ]
+  }}
+
+  Rules:
+  - difficulty must be one of: beginner, intermediate, advanced
+  - topic should be 1–4 words identifying the subtopic
+  - answer should be 2–5 sentences — complete but concise
+  - Generate exactly {faq_count} questions
+  - Order from beginner to advanced

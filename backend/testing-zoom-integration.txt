@@ -1,0 +1,185 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  Phase 19B — Zoom Live Class Integration: Testing Guide                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Prerequisites
+─────────────
+• Zoom Server-to-Server OAuth app created in Zoom Marketplace
+• Scopes: meeting:write:admin, report:read:admin, cloud_recording:read:admin
+• Webhook URL registered (see Step 1)
+• axis-ai deployed (run deploy-zoom-integration.sh)
+
+
+STEP 1 — Verify webhook endpoint is live
+─────────────────────────────────────────
+curl -s -o /dev/null -w "%{http_code}" -X POST \
+  https://axisai.edzlms.com/api/v1/webhooks/zoom \
+  -H "Content-Type: application/json" \
+  -d '{"event":"unknown_event"}'
+
+Expected: 400 (Missing Zoom signature headers) — endpoint is reachable
+
+
+STEP 2 — Admin: configure Zoom credentials
+───────────────────────────────────────────
+UI: https://axis.edzlms.com → Admin sidebar → Zoom Integration
+
+curl -X POST https://axisai.edzlms.com/api/v1/admin/zoom-config \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "zoom_enabled": true,
+    "zoom_account_id": "YOUR_ACCOUNT_ID",
+    "zoom_client_id": "YOUR_CLIENT_ID",
+    "zoom_client_secret": "YOUR_CLIENT_SECRET",
+    "zoom_webhook_secret": "YOUR_WEBHOOK_SECRET_TOKEN",
+    "zoom_default_auto_record": true,
+    "zoom_default_import_recording": true,
+    "zoom_default_import_attendance": true,
+    "zoom_default_generate_ai": true
+  }'
+
+Expected: 200 with ZoomConfigResponse (secrets show as _set: true, not plaintext)
+
+
+STEP 3 — Test Zoom connection
+──────────────────────────────
+UI: Admin → Zoom Integration → "Test Connection" button
+
+curl -X POST https://axisai.edzlms.com/api/v1/admin/zoom-config/test \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+Expected: {"ok": true, "email": "your@zoom.email", "plan_type": 2, ...}
+
+
+STEP 4 — Schedule a live class
+────────────────────────────────
+UI: Creator → Space detail → Live Classes section → "Schedule Class"
+
+curl -X POST "https://axisai.edzlms.com/api/v1/spaces/SPACE_UUID/live-classes" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Test Live Class",
+    "description": "Integration test session",
+    "scheduled_at": "2026-06-01T10:00:00Z",
+    "duration_minutes": 30,
+    "auto_record": true,
+    "import_recording": true,
+    "import_attendance": true,
+    "generate_ai_outputs": true,
+    "notify_learners": false
+  }'
+
+Expected: 201 with session including join_url, host_url, external_meeting_id
+
+
+STEP 5 — List classes for a space
+───────────────────────────────────
+curl "https://axisai.edzlms.com/api/v1/spaces/SPACE_UUID/live-classes" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+Expected: {"sessions": [...], "total": 1}
+
+
+STEP 6 — Simulate meeting.ended webhook
+─────────────────────────────────────────
+(Use Zoom's Event Subscription validator, or send a test payload)
+
+In Zoom Marketplace → your app → Event Subscriptions → Send test payload:
+  Event: meeting.ended
+  Meeting ID: (the external_meeting_id from Step 4)
+
+OR manually via curl (requires correct HMAC signature — use Zoom's test tool):
+This automatically queues:
+  - import_attendance_report task
+  - Status updated to 'ended' in DB
+
+
+STEP 7 — Simulate recording.completed webhook
+───────────────────────────────────────────────
+In Zoom Marketplace → send test payload:
+  Event: recording.completed
+  Meeting ID: same as above
+
+This queues: import_live_recording task
+
+
+STEP 8 — Manually trigger import (dev/test shortcut)
+──────────────────────────────────────────────────────
+curl -X POST "https://axisai.edzlms.com/api/v1/live-classes/SESSION_UUID/import-now" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+Expected: {"queued": ["import_recording", "import_attendance"], "session_id": "..."}
+
+Monitor Celery worker logs:
+  sudo journalctl -u axis-ai-worker -f
+
+
+STEP 9 — Check attendance after import
+────────────────────────────────────────
+curl "https://axisai.edzlms.com/api/v1/live-classes/SESSION_UUID/attendance" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+Expected: {"session_id": "...", "participant_count": N, "attendance": [...]}
+
+
+STEP 10 — Cancel a class
+─────────────────────────
+curl -X DELETE "https://axisai.edzlms.com/api/v1/live-classes/SESSION_UUID" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+Expected: 204 No Content
+Verify: Zoom meeting deleted from your Zoom account
+
+
+STEP 11 — Beat task verification
+──────────────────────────────────
+The poll_pending_sessions beat task runs every 15 minutes.
+To trigger it manually:
+
+cd /home/axisai/axisai-backend/axis-ai
+source .venv/bin/activate
+celery -A app.tasks.celery_app call app.tasks.live_class_tasks.poll_pending_sessions
+
+Expected output: {"checked": 0, "triggered": 0}
+(or N/M if there are stale sessions)
+
+
+STEP 12 — Learner view
+────────────────────────
+1. Log in as a learner
+2. Open a space that has a scheduled class
+3. At the top of the space, a blue card should appear:
+   "Test Live Class — 01 Jun 2026, 10:00 AM · 30 min · Join Class →"
+4. If status is 'live', card turns green and shows "LIVE NOW" badge
+5. After import completes: the recording appears in the space's content list
+
+
+Database verification
+──────────────────────
+-- Check sessions
+SELECT id, title, status, external_meeting_id, participant_count
+FROM live_class_sessions
+ORDER BY created_at DESC LIMIT 5;
+
+-- Check attendance
+SELECT user_email, user_name, joined_at, left_at, duration_seconds
+FROM live_class_attendance
+WHERE session_id = 'SESSION_UUID';
+
+-- Check content_item was created for recording
+SELECT id, title, content_type, status
+FROM content_items
+WHERE title LIKE '[Recording]%'
+ORDER BY created_at DESC LIMIT 5;
+
+
+Common issues
+──────────────
+• "Zoom is not enabled for this tenant"  → Admin hasn't saved Zoom config yet
+• "Zoom API 401"                         → Client ID/Secret wrong or app not activated
+• "No completed MP4 recording found"     → Cloud recording wasn't enabled in Zoom account settings
+• recording.completed not firing         → Check Zoom app Event Subscription status; ensure webhook URL is verified
+• import_recording fails repeatedly      → Check axis-ai-worker logs; Zoom may need 10-15 min to process recording
+• Learner join card not showing          → Session status must be 'scheduled' or 'live'

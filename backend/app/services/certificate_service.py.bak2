@@ -1,0 +1,464 @@
+"""
+Certificate Service — PF-02.
+
+Checks whether a learner has completed all required items in a Learning Space,
+then generates and caches a PDF completion certificate using PyMuPDF.
+
+Certificate design:
+  - A4 landscape page
+  - Tenant/platform name at top
+  - "Certificate of Completion" heading
+  - Learner full name (large)
+  - "has successfully completed" body text
+  - Space title
+  - Completion date
+  - Decorative border + horizontal rule
+"""
+from __future__ import annotations
+
+import os
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import asyncio
+import fitz  # PyMuPDF
+import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.certificate import SpaceCertificate
+from app.models.content import UserContentProgress, ContentStatus
+from app.models.space import LearningSpace, SpaceItem
+from app.models.user import AxisUser
+
+log = structlog.get_logger(__name__)
+
+# Directory where certificate PDFs are stored on disk
+CERT_DIR = Path(os.environ.get("CERT_DIR", "/data/certificates"))
+
+# ── Colours (RGB 0-1) ────────────────────────────────────────────────────────
+BRAND_BLUE   = (0.078, 0.278, 0.902)   # #1447E6
+BRAND_DARK   = (0.047, 0.035, 0.047)   # #0C090C
+GOLD         = (0.855, 0.647, 0.125)   # #DAA520
+MUTED        = (0.475, 0.412, 0.482)   # #79697B
+BORDER_GREY  = (0.906, 0.894, 0.906)   # #E7E4E7
+
+
+async def check_space_completion(
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> dict:
+    """
+    Check whether a learner has completed all content items in a space.
+
+    Returns:
+        {
+          "completed": bool,
+          "total_items": int,
+          "completed_items": int,
+          "progress_pct": float (0-100),
+          "certificate_issued": bool,
+        }
+    """
+    # Fetch all space items (content that must be completed)
+    r = await db.execute(
+        select(SpaceItem.content_item_id).where(SpaceItem.space_id == space_id)
+    )
+    item_ids = [row.content_item_id for row in r]
+    total = len(item_ids)
+
+    if total == 0:
+        return {
+            "completed": False,
+            "total_items": 0,
+            "completed_items": 0,
+            "progress_pct": 0,
+            "certificate_issued": False,
+        }
+
+    # Count how many the learner has completed (progress_pct >= 100 OR completed_at is set)
+    prog_r = await db.execute(
+        select(UserContentProgress).where(
+            UserContentProgress.user_id == user_id,
+            UserContentProgress.content_item_id.in_(item_ids),
+            UserContentProgress.progress_pct >= 100,
+        )
+    )
+    completed_items = len(prog_r.scalars().all())
+    progress_pct = (completed_items / total) * 100
+
+    # Check if a certificate was already issued
+    cert_r = await db.execute(
+        select(SpaceCertificate).where(
+            SpaceCertificate.user_id == user_id,
+            SpaceCertificate.space_id == space_id,
+        )
+    )
+    cert = cert_r.scalars().first()
+
+    return {
+        "completed": completed_items >= total,
+        "total_items": total,
+        "completed_items": completed_items,
+        "progress_pct": round(progress_pct, 1),
+        "certificate_issued": cert is not None,
+        "certificate_id": str(cert.id) if cert else None,
+    }
+
+
+async def issue_certificate(
+    space_id: uuid.UUID,
+    user: AxisUser,
+    db: AsyncSession,
+    tenant_name: str = "EDZLMS",
+) -> SpaceCertificate:
+    """
+    Issue (or re-issue) a completion certificate for a learner.
+
+    1. Verifies space completion.
+    2. Generates a PDF using PyMuPDF.
+    3. Persists / updates the SpaceCertificate row.
+    4. Returns the SpaceCertificate ORM object.
+
+    Raises ValueError if the space is not yet completed.
+    """
+    status = await check_space_completion(space_id, user.id, db)
+    if not status["completed"]:
+        raise ValueError(
+            f"Space not yet completed: {status['completed_items']}/{status['total_items']} items done."
+        )
+
+    # Fetch space title
+    space_r = await db.execute(
+        select(LearningSpace.title).where(LearningSpace.id == space_id)
+    )
+    space_title = space_r.scalar_one_or_none() or "Learning Space"
+
+    learner_name = user.full_name or user.email
+    completion_date = datetime.now(timezone.utc)
+
+    # Generate PDF bytes
+    pdf_bytes = _generate_certificate_pdf(
+        learner_name=learner_name,
+        space_title=space_title,
+        completion_date=completion_date,
+        tenant_name=tenant_name,
+    )
+
+    # Save to disk
+    CERT_DIR.mkdir(parents=True, exist_ok=True)
+    cert_id = uuid.uuid4()
+    pdf_path = CERT_DIR / f"{cert_id}.pdf"
+    pdf_path.write_bytes(pdf_bytes)
+
+    cert_data = {
+        "learner_name": learner_name,
+        "learner_email": user.email or "",
+        "space_title": space_title,
+        "completion_date": completion_date.isoformat(),
+        "tenant_name": tenant_name,
+    }
+
+    # Upsert certificate record
+    existing_r = await db.execute(
+        select(SpaceCertificate).where(
+            SpaceCertificate.user_id == user.id,
+            SpaceCertificate.space_id == space_id,
+        )
+    )
+    cert = existing_r.scalars().first()
+
+    if cert:
+        # Remove old PDF if it exists
+        if cert.pdf_path and Path(cert.pdf_path).exists():
+            Path(cert.pdf_path).unlink(missing_ok=True)
+        cert.pdf_path = str(pdf_path)
+        cert.issued_at = completion_date
+        cert.cert_data = cert_data
+    else:
+        cert = SpaceCertificate(
+            id=cert_id,
+            user_id=user.id,
+            space_id=space_id,
+            issued_at=completion_date,
+            pdf_path=str(pdf_path),
+            cert_data=cert_data,
+        )
+        db.add(cert)
+
+    await db.commit()
+    await db.refresh(cert)
+
+    log.info("certificate_issued", cert_id=str(cert.id), user_id=str(user.id), space_id=str(space_id))
+
+    # Fire-and-forget certificate email (never blocks or raises)
+    learner_email = cert_data.get("learner_email", "")
+    if learner_email:
+        from app.services.email import send_certificate_email
+        safe_title = space_title.replace(" ", "_")[:40]
+        email_filename = f"certificate_{safe_title}.pdf"
+        asyncio.ensure_future(
+            send_certificate_email(
+                to_email=learner_email,
+                to_name=learner_name,
+                space_title=space_title,
+                pdf_bytes=pdf_bytes,
+                pdf_filename=email_filename,
+                site_name=tenant_name,
+            )
+        )
+
+    return cert
+
+
+def get_certificate_pdf_bytes(cert: SpaceCertificate) -> bytes:
+    """Read the stored certificate PDF from disk. Re-generate if missing."""
+    if cert.pdf_path and Path(cert.pdf_path).exists():
+        return Path(cert.pdf_path).read_bytes()
+
+    # Regenerate on-the-fly if file is missing
+    log.warning("certificate_pdf_missing_regenerating", cert_id=str(cert.id))
+    data = cert.cert_data or {}
+    return _generate_certificate_pdf(
+        learner_name=data.get("learner_name", "Learner"),
+        space_title=data.get("space_title", "Course"),
+        completion_date=datetime.fromisoformat(data.get("completion_date", datetime.now().isoformat())),
+        tenant_name=data.get("tenant_name", "EDZLMS"),
+    )
+
+
+def _generate_certificate_pdf(
+    learner_name: str,
+    space_title: str,
+    completion_date: datetime,
+    tenant_name: str = "EDZLMS",
+) -> bytes:
+    """
+    Render a completion certificate as a PDF using PyMuPDF.
+
+    Page: A4 landscape (842 × 595 pt)
+    """
+    W, H = 842, 595
+
+    doc = fitz.open()
+    page = doc.new_page(width=W, height=H)
+
+    # ── Outer border ─────────────────────────────────────────────────────────
+    margin = 28
+    page.draw_rect(
+        fitz.Rect(margin, margin, W - margin, H - margin),
+        color=BRAND_BLUE, width=2.5,
+    )
+    # Inner decorative border
+    inner = 38
+    page.draw_rect(
+        fitz.Rect(inner, inner, W - inner, H - inner),
+        color=GOLD, width=0.8,
+    )
+
+    # ── Top bar ───────────────────────────────────────────────────────────────
+    page.draw_rect(
+        fitz.Rect(margin, margin, W - margin, margin + 60),
+        color=BRAND_BLUE, fill=BRAND_BLUE,
+    )
+
+    # Tenant name in top bar
+    page.insert_text(
+        (W / 2, margin + 38),
+        tenant_name.upper(),
+        fontsize=14,
+        fontname="helv",
+        color=(1, 1, 1),
+        align=1,  # centre — fitz uses point as anchor, so centre manually
+    )
+
+    # ── Gold star decorations ────────────────────────────────────────────────
+    for x in [W / 2 - 30, W / 2, W / 2 + 30]:
+        page.insert_text((x - 5, margin + 48), "★", fontsize=10, color=(1, 1, 1))
+
+    # ── Main content ──────────────────────────────────────────────────────────
+    y = margin + 100
+
+    # "Certificate of Completion"
+    title_text = "Certificate of Completion"
+    page.insert_text(
+        (W / 2 - _text_width(title_text, 26) / 2, y),
+        title_text,
+        fontsize=26,
+        fontname="hebo",  # Helvetica Bold
+        color=BRAND_BLUE,
+    )
+    y += 40
+
+    # Thin gold rule
+    page.draw_line(
+        fitz.Point(W / 2 - 120, y), fitz.Point(W / 2 + 120, y),
+        color=GOLD, width=1.0,
+    )
+    y += 28
+
+    # "This is to certify that"
+    sub = "This is to certify that"
+    page.insert_text(
+        (W / 2 - _text_width(sub, 11) / 2, y),
+        sub, fontsize=11, fontname="helv", color=MUTED,
+    )
+    y += 36
+
+    # Learner name (large)
+    page.insert_text(
+        (W / 2 - _text_width(learner_name, 32) / 2, y),
+        learner_name, fontsize=32, fontname="hebo", color=BRAND_DARK,
+    )
+    y += 12
+
+    # Underline below name
+    name_w = min(_text_width(learner_name, 32), W - 160)
+    page.draw_line(
+        fitz.Point(W / 2 - name_w / 2, y),
+        fitz.Point(W / 2 + name_w / 2, y),
+        color=BORDER_GREY, width=1.0,
+    )
+    y += 28
+
+    # "has successfully completed"
+    has_text = "has successfully completed"
+    page.insert_text(
+        (W / 2 - _text_width(has_text, 11) / 2, y),
+        has_text, fontsize=11, fontname="helv", color=MUTED,
+    )
+    y += 36
+
+    # Space title
+    page.insert_text(
+        (W / 2 - _text_width(space_title, 18) / 2, y),
+        space_title, fontsize=18, fontname="hebo", color=BRAND_BLUE,
+    )
+    y += 50
+
+    # Completion date
+    date_str = completion_date.strftime("%B %d, %Y")
+    date_label = f"Completed on {date_str}"
+    page.insert_text(
+        (W / 2 - _text_width(date_label, 10) / 2, y),
+        date_label, fontsize=10, fontname="helv", color=MUTED,
+    )
+
+    # ── Bottom bar ────────────────────────────────────────────────────────────
+    page.draw_rect(
+        fitz.Rect(margin, H - margin - 32, W - margin, H - margin),
+        color=BRAND_BLUE, fill=BRAND_BLUE,
+    )
+    footer = f"Issued by {tenant_name} · axis.edzlms.com"
+    page.insert_text(
+        (W / 2 - _text_width(footer, 9) / 2, H - margin - 12),
+        footer, fontsize=9, fontname="helv", color=(1, 1, 1),
+    )
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
+
+
+def _text_width(text: str, fontsize: float) -> float:
+    """Approximate text width: ~0.55 × fontsize × char_count (Helvetica)."""
+    return fontsize * 0.55 * len(text)
+
+
+async def force_issue_certificate(
+    space_id: uuid.UUID,
+    user: AxisUser,
+    db: AsyncSession,
+    tenant_name: str = "EDZLMS",
+) -> SpaceCertificate:
+    """
+    Forcibly issue a certificate for a learner WITHOUT checking completion.
+    Used for manual trigger type or admin overrides.
+
+    Skips the completion check that ``issue_certificate`` enforces.
+    """
+    space_r = await db.execute(
+        select(LearningSpace.title).where(LearningSpace.id == space_id)
+    )
+    space_title = space_r.scalar_one_or_none() or "Learning Space"
+
+    learner_name = user.full_name or user.email
+    completion_date = datetime.now(timezone.utc)
+
+    pdf_bytes = _generate_certificate_pdf(
+        learner_name=learner_name,
+        space_title=space_title,
+        completion_date=completion_date,
+        tenant_name=tenant_name,
+    )
+
+    CERT_DIR.mkdir(parents=True, exist_ok=True)
+    cert_id = uuid.uuid4()
+    pdf_path = CERT_DIR / f"{cert_id}.pdf"
+    pdf_path.write_bytes(pdf_bytes)
+
+    cert_data = {
+        "learner_name": learner_name,
+        "learner_email": user.email or "",
+        "space_title": space_title,
+        "completion_date": completion_date.isoformat(),
+        "tenant_name": tenant_name,
+        "issued_manually": True,
+    }
+
+    # Upsert (allow re-issue via force)
+    existing_r = await db.execute(
+        select(SpaceCertificate).where(
+            SpaceCertificate.user_id == user.id,
+            SpaceCertificate.space_id == space_id,
+        )
+    )
+    cert = existing_r.scalars().first()
+
+    if cert:
+        if cert.pdf_path and Path(cert.pdf_path).exists():
+            Path(cert.pdf_path).unlink(missing_ok=True)
+        cert.pdf_path = str(pdf_path)
+        cert.issued_at = completion_date
+        cert.cert_data = cert_data
+        cert.id = cert_id  # new PDF, new ID
+    else:
+        cert = SpaceCertificate(
+            id=cert_id,
+            user_id=user.id,
+            space_id=space_id,
+            issued_at=completion_date,
+            pdf_path=str(pdf_path),
+            cert_data=cert_data,
+        )
+        db.add(cert)
+
+    await db.commit()
+    await db.refresh(cert)
+
+    log.info(
+        "certificate_force_issued",
+        cert_id=str(cert.id),
+        user_id=str(user.id),
+        space_id=str(space_id),
+    )
+
+    learner_email = cert_data.get("learner_email", "")
+    if learner_email:
+        from app.services.email import send_certificate_email
+        safe_title = space_title.replace(" ", "_")[:40]
+        asyncio.ensure_future(
+            send_certificate_email(
+                to_email=learner_email,
+                to_name=learner_name,
+                space_title=space_title,
+                pdf_bytes=pdf_bytes,
+                pdf_filename=f"certificate_{safe_title}.pdf",
+                site_name=tenant_name,
+            )
+        )
+
+    return cert

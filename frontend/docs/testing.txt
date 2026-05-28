@@ -1,0 +1,309 @@
+===========================================================
+AXIS FRONTEND — TEST PLAN
+axis.edzlms.com / axis-frontend (Next.js 14)
+===========================================================
+
+PRE-TEST CHECKLIST
+------------------
+□ axis-ai FastAPI running: curl https://axisai.edzlms.com/api/v1/health
+□ axis-frontend running: pm2 status | grep axis-frontend
+□ Users seeded: cat /home/axisai/AXIS_CREDENTIALS.txt
+□ At least one feature enabled: Admin → Feature Control → Summary ON
+□ Domain resolves: curl -I https://axis.edzlms.com
+
+
+------------------------------------------------------------
+1. AUTH TESTS
+------------------------------------------------------------
+
+1.1 Login with valid admin credentials
+  GET  https://axis.edzlms.com/login
+  Enter: admin@axis.edzlms.com / <password from credentials file>
+  EXPECT: Redirect to /dashboard, AdminDashboard renders with 4 stat cards
+
+1.2 Login with invalid password
+  Enter wrong password
+  EXPECT: Error toast "Invalid credentials", no redirect
+
+1.3 Login with non-existent user
+  Enter: fake@example.com / anything
+  EXPECT: Same error as 1.2 (no user enumeration)
+
+1.4 JWT refresh
+  Log in, wait 15 min (or manipulate token expiry in .env for testing)
+  EXPECT: Middleware auto-refreshes token, user stays logged in
+
+1.5 Logout
+  Click logout button in sidebar
+  EXPECT: Redirect to /login, axis_refresh cookie cleared
+
+1.6 Protected route without auth
+  Open fresh browser, navigate to https://axis.edzlms.com/dashboard
+  EXPECT: Redirect to /login
+
+1.7 Role guard — creator cannot access /admin
+  Log in as creator
+  Navigate to https://axis.edzlms.com/admin
+  EXPECT: Redirect to /dashboard (403 or role redirect)
+
+API equivalent:
+  curl -c cookies.txt -X POST https://axis.edzlms.com/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"admin@axis.edzlms.com","password":"<ADMIN_PASSWORD>"}'
+  # EXPECT: {"access_token": "...", "user": {...}}
+
+  curl -b cookies.txt https://axis.edzlms.com/api/auth/me
+  # EXPECT: {"id": "...", "email": "admin@...", "role": "admin"}
+
+
+------------------------------------------------------------
+2. ADMIN TESTS
+------------------------------------------------------------
+
+2.1 Admin Dashboard loads
+  Log in as admin → Dashboard
+  EXPECT: 4 stat cards visible, Quick Actions grid (6 cards)
+
+2.2 Feature Toggles — enable and save
+  Admin → Feature Control
+  Toggle "Summary" on → click Save Changes
+  EXPECT: Toast "Feature settings saved", green pill appears in summary
+
+2.3 Feature Toggles — reset without saving
+  Toggle something → click Reset
+  EXPECT: Toggle returns to last saved state, no API call
+
+2.4 KB Manager — add plain text document
+  Admin → Knowledge Base → Add Document
+  Type: Plain Text, Title: "Test Doc", Content: "Passlib is a password hashing library."
+  Click Add Document
+  EXPECT: Document appears in list with "Plain Text" icon
+
+2.5 KB Manager — search
+  Type "Passlib" in search box
+  EXPECT: Only the doc added in 2.4 shows
+
+2.6 KB Manager — delete
+  Click trash icon on the test doc → confirm
+  EXPECT: Doc removed from list, success toast
+
+2.7 Users page loads
+  Admin → User Management
+  EXPECT: Table with at least 3 rows (admin, creator, learner), role badges colored
+
+2.8 Usage page loads
+  Admin → Usage & Limits → select "30 days"
+  EXPECT: Stat cards visible, daily chart renders (may show 0s if no usage yet)
+
+2.9 Audit Log — loads and paginates
+  Admin → Audit Log
+  EXPECT: Table of events (at least login events from testing above)
+  Click a row → EXPECT: JSON details expand below
+
+API:
+  curl -b cookies.txt https://axis.edzlms.com/api/admin/status
+  # EXPECT: {"content_items_count": N, "kb_items_count": M, ...}
+
+
+------------------------------------------------------------
+3. CREATOR TESTS
+------------------------------------------------------------
+
+3.1 Creator Dashboard
+  Log in as creator → Dashboard
+  EXPECT: CreatorDashboard with 4 stat cards, "No learning spaces yet" empty state
+
+3.2 Create Learning Space
+  Click New Space → fill Title: "ML Basics", Description: "Machine learning intro"
+  Add tags: "ai", "ml", toggle Guest Access on
+  Click Create Space
+  EXPECT: Redirect to /spaces/<id>, space detail page loads
+
+3.3 Space Detail — Add PDF content
+  In space detail → Add Content → PDF/Text
+  Drop/select a small PDF file → select Summary + Glossary outputs
+  Click Upload & Process
+  EXPECT: Success toast, job progress card appears, status polls every 3s
+  Wait for status to show "Complete"
+
+3.4 Space Detail — Add YouTube video
+  Add Content → YouTube → enter https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  Select Summary output → Upload & Process
+  EXPECT: Ingest job starts
+
+3.5 Publish Space
+  Click Publish button → confirm
+  EXPECT: Button turns green "Published", metadata strip shows "Published" badge
+
+3.6 Generate Share Link
+  Click Share → select "30 days" → Generate Share Link
+  EXPECT: URL appears, copy button works
+
+3.7 Content Workspace — Summary tab
+  Click ArrowRight on a done content item → /content/<id>
+  Click Summary tab
+  EXPECT: Full summary text renders, Edit button → editable textarea → Save works
+
+3.8 Content Workspace — Glossary tab
+  Click Glossary tab
+  EXPECT: List of term cards with definitions + search works
+
+3.9 Content Workspace — Flashcards tab
+  Click Flashcards tab
+  EXPECT: Grid of card thumbnails, click a card → 3D flip animation shows answer
+
+3.10 Content Workspace — Quiz tab
+  Click Quiz tab
+  EXPECT: List of questions, expand shows options with correct answer highlighted green
+  Bloom's badge visible per question
+
+3.11 Content Workspace — Infographic tab
+  Click Infographic tab
+  EXPECT: iframe renders HTML infographic, Full Screen button opens new tab
+
+API:
+  curl -b cookies.txt -X POST https://axis.edzlms.com/api/spaces \
+    -H "Content-Type: application/json" \
+    -d '{"title":"Test Space","description":"Test","tags":[],"is_guest_accessible":false}'
+  # EXPECT: {"id": "...", "title": "Test Space", "slug": "test-space-xxxx"}
+
+  # Ingest via URL
+  curl -b cookies.txt -X POST https://axis.edzlms.com/api/content/ingest \
+    -H "Content-Type: application/json" \
+    -d '{"content_type":"youtube","source_url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","generate_outputs":["summary"],"space_id":"<SPACE_ID>"}'
+  # EXPECT: {"content_item_id": "...", "job_id": "..."}
+
+  # Poll job
+  curl -b cookies.txt https://axis.edzlms.com/api/content/jobs/<JOB_ID>
+  # EXPECT: {"status": "processing"|"done"|"failed", "progress": 0-100}
+
+
+------------------------------------------------------------
+4. LEARNER TESTS
+------------------------------------------------------------
+
+4.1 Learner Dashboard
+  Log in as learner → Dashboard
+  EXPECT: LearnerDashboard with grid of published spaces assigned to this learner
+
+4.2 Open a Learning Space
+  Click a space card
+  EXPECT: /learn/<spaceId> shows content item grid
+
+4.3 Study Content — Summary
+  Click a content item → /learn/<spaceId>/content/<contentId>
+  Click Summary tab
+  EXPECT: Read-only summary renders cleanly
+
+4.4 Study Content — Flashcards (interactive)
+  Click Flashcards tab
+  EXPECT: Single large card, click to flip → answer revealed
+  Click "Got It" / "Need Review" → moves to next card
+  After last card → results screen with score
+
+4.5 Study Content — Quiz (step through)
+  Click Quiz tab
+  EXPECT: Single question + 4 options
+  Click an option → immediate feedback (green=correct, red=wrong) + explanation shown
+  Click Next → advances
+  After last question → results screen with pass/fail + per-question breakdown
+  Click Retry → resets quiz
+
+4.6 AI Tutor Chat
+  On any study content page → click MessageSquare button in header
+  EXPECT: Chat panel slides in from bottom-right
+  Type "Summarize the main points" → send
+  EXPECT: AI response appears
+
+4.7 Quick suggestions in chat
+  Open chat panel → initial state shows 3 suggestion buttons
+  Click one → pre-fills input
+  EXPECT: Sends the suggestion and gets a response
+
+
+------------------------------------------------------------
+5. GUEST ACCESS TESTS
+------------------------------------------------------------
+
+5.1 Valid share link
+  Use share URL generated in test 3.6:
+  Open in incognito: https://axis.edzlms.com/learn/guest?token=<TOKEN>
+  EXPECT: Space title, description, content list visible WITHOUT login
+
+5.2 CTA block visible
+  EXPECT: "Get Started Free" sign-in block at bottom of guest page
+
+5.3 Invalid/expired token
+  Navigate to https://axis.edzlms.com/learn/guest?token=invalid_token
+  EXPECT: Error page "Link Unavailable" with Sign In button
+
+5.4 No token
+  Navigate to https://axis.edzlms.com/learn/guest
+  EXPECT: Error page (missing token)
+
+5.5 Private space not accessible as guest
+  Try to access a non-guest-accessible space share link
+  EXPECT: Error page (forbidden)
+
+
+------------------------------------------------------------
+6. SECURITY TESTS
+------------------------------------------------------------
+
+6.1 AXIS_AI_KEY not in browser
+  Open browser DevTools → Network tab
+  Log in, navigate around
+  EXPECT: No request shows the X-Master-Key or Authorization: Bearer axai_... header
+  The key only appears in server-to-server calls (not visible in browser)
+
+6.2 HttpOnly cookie
+  DevTools → Application → Cookies → axis.edzlms.com
+  EXPECT: axis_refresh cookie has HttpOnly flag (NOT accessible via JS)
+  EXPECT: axis_access cookie visible (used by middleware)
+
+6.3 Unauthenticated API access
+  curl https://axis.edzlms.com/api/admin/status
+  # EXPECT: 401 Unauthorized (no cookie)
+
+6.4 Cross-role API access
+  Log in as creator, copy axis_access token
+  Try: curl -H "Cookie: axis_access=<token>" https://axis.edzlms.com/api/admin/status
+  EXPECT: 403 Forbidden
+
+6.5 Security headers
+  curl -I https://axis.edzlms.com
+  EXPECT:
+    X-Frame-Options: SAMEORIGIN
+    X-Content-Type-Options: nosniff
+    Referrer-Policy: strict-origin-when-cross-origin
+
+
+------------------------------------------------------------
+7. SYSTEM HEALTH CHECK
+------------------------------------------------------------
+
+Run after any deployment:
+
+  # All services up
+  for svc in nginx postgresql redis-server qdrant axis-ai axis-ai-worker axis-ai-beat; do
+    printf "%-25s %s\n" "$svc" "$(systemctl is-active $svc)"
+  done
+
+  # PM2
+  pm2 status
+
+  # API health
+  curl https://axisai.edzlms.com/api/v1/health
+  curl -I https://axis.edzlms.com
+
+  # SSL cert expiry
+  echo | openssl s_client -connect axis.edzlms.com:443 2>/dev/null | openssl x509 -noout -dates
+
+
+------------------------------------------------------------
+EXPECTED PASS: All 40+ test cases above.
+Known limitations:
+- Usage charts show zeros until real usage occurs
+- Infographic requires GPT-4o which must be configured in OPENAI_API_KEY
+- Chat requires an active chat session (FastAPI /chat/sessions endpoint)
+===========================================================

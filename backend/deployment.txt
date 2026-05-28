@@ -1,0 +1,886 @@
+axis-ai — Complete Deployment Guide
+=====================================
+Domain  : api.aiaxis.com  (API lives on a subdomain — cleaner for Moodle)
+Server  : Fresh Ubuntu 22.04 LTS VPS
+Last updated: March 2026
+
+NOTE: Commands that start with "$" run as your normal user.
+      Commands that start with "#" run as root (or via sudo).
+      Read each section fully before running commands in it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 0 — RECOMMENDED SERVER SPECS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Minimum (small school, <500 students):
+  CPU    2 vCPU
+  RAM    4 GB
+  Disk   40 GB SSD
+  OS     Ubuntu 22.04 LTS
+
+Recommended (medium deployment, 500-5000 students):
+  CPU    4 vCPU
+  RAM    8 GB
+  Disk   80 GB SSD
+  OS     Ubuntu 22.04 LTS
+
+Good providers: DigitalOcean, Hetzner, Linode, AWS EC2, Vultr.
+Hetzner CX32 (4 vCPU / 8 GB / €8/month) is excellent value.
+
+DNS requirement BEFORE starting:
+  Create an A record:  api.aiaxis.com  →  YOUR_SERVER_IP
+  Wait for it to propagate (5-30 minutes) before the SSL step.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — FIRST LOGIN & BASIC SERVER HARDENING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1.1 — SSH into your server as root
+----------------------------------------
+  ssh root@YOUR_SERVER_IP
+
+Step 1.2 — Update everything
+------------------------------
+  # apt update && apt upgrade -y
+
+Step 1.3 — Create a non-root user (never run your app as root)
+---------------------------------------------------------------
+  # adduser axisai
+    (enter a strong password when prompted)
+
+  # usermod -aG sudo axisai
+
+Step 1.4 — Copy your SSH key to the new user (so you can log in)
+-----------------------------------------------------------------
+  # rsync --archive --chown=axisai:axisai ~/.ssh /home/axisai
+
+Step 1.5 — Configure the firewall
+-----------------------------------
+  # ufw allow OpenSSH
+  # ufw allow 80
+  # ufw allow 443
+  # ufw enable
+    (type "y" when asked)
+
+  # ufw status
+    (should show 22, 80, 443 as ALLOW)
+
+Step 1.6 — Log out and log back in as the new user
+----------------------------------------------------
+  # exit
+  $ ssh axisai@YOUR_SERVER_IP
+
+  All remaining steps run as "axisai" (using sudo where needed).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — INSTALL SYSTEM DEPENDENCIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 2.1 — Install core packages
+----------------------------------
+  $ sudo apt install -y \
+      curl wget git unzip build-essential \
+      software-properties-common \
+      ca-certificates gnupg lsb-release \
+      nginx certbot python3-certbot-nginx
+
+Step 2.2 — Install Python 3.11
+--------------------------------
+  Ubuntu 22.04 ships with Python 3.10. axis-ai requires 3.11.
+
+  $ sudo add-apt-repository ppa:deadsnakes/ppa -y
+  $ sudo apt update
+  $ sudo apt install -y python3.11 python3.11-venv python3.11-dev
+
+  Verify:
+  $ python3.11 --version
+    → Python 3.11.x
+
+Step 2.3 — Install pip for Python 3.11
+----------------------------------------
+  $ curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+  $ python3.11 -m pip --version
+
+Step 2.4 — Install PostgreSQL 15
+----------------------------------
+  $ sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt \
+    $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+  $ wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    | sudo apt-key add -
+
+  $ sudo apt update
+  $ sudo apt install -y postgresql-15 postgresql-client-15
+
+  Verify:
+  $ sudo systemctl status postgresql
+    → should show "active (running)"
+
+Step 2.5 — Install Redis 7
+----------------------------
+  $ curl -fsSL https://packages.redis.io/gpg \
+    | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+
+  $ echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] \
+    https://packages.redis.io/deb $(lsb_release -cs) main" \
+    | sudo tee /etc/apt/sources.list.d/redis.list
+
+  $ sudo apt update
+  $ sudo apt install -y redis
+
+  Verify:
+  $ redis-cli ping
+    → PONG
+
+Step 2.6 — Install Qdrant (vector database)
+--------------------------------------------
+  We run Qdrant as a systemd service using its pre-built binary.
+
+  $ sudo mkdir -p /opt/qdrant/{bin,storage,config}
+  $ sudo chown -R axisai:axisai /opt/qdrant
+
+  Download the latest Qdrant binary:
+  $ wget -O /tmp/qdrant.tar.gz \
+    https://github.com/qdrant/qdrant/releases/latest/download/qdrant-x86_64-unknown-linux-musl.tar.gz
+
+  $ tar -xzf /tmp/qdrant.tar.gz -C /tmp
+  $ sudo mv /tmp/qdrant /opt/qdrant/bin/qdrant
+  $ sudo chmod +x /opt/qdrant/bin/qdrant
+
+  Create Qdrant config:
+  $ cat > /opt/qdrant/config/config.yaml << 'EOF'
+storage:
+  storage_path: /opt/qdrant/storage
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+  enable_cors: false
+
+log_level: INFO
+EOF
+
+  Create systemd service for Qdrant:
+  $ sudo tee /etc/systemd/system/qdrant.service > /dev/null << 'EOF'
+[Unit]
+Description=Qdrant Vector Database
+After=network.target
+
+[Service]
+Type=simple
+User=axisai
+ExecStart=/opt/qdrant/bin/qdrant --config-path /opt/qdrant/config/config.yaml
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/qdrant
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  $ sudo systemctl daemon-reload
+  $ sudo systemctl enable qdrant
+  $ sudo systemctl start qdrant
+
+  Verify:
+  $ curl http://127.0.0.1:6333/healthz
+    → {"title":"qdrant - vector search engine","version":"..."}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — DATABASE SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 3.1 — Create the PostgreSQL database and user
+----------------------------------------------------
+  $ sudo -u postgres psql
+
+  Inside the psql prompt, run these commands one by one:
+
+  CREATE USER axisai_user WITH PASSWORD 'CHOOSE_A_STRONG_PASSWORD_HERE';
+  CREATE DATABASE axisai_db OWNER axisai_user;
+  GRANT ALL PRIVILEGES ON DATABASE axisai_db TO axisai_user;
+  \q
+
+  IMPORTANT: Replace CHOOSE_A_STRONG_PASSWORD_HERE with a real strong
+  password (e.g. openssl rand -base64 32). Save it — you'll need it
+  for the .env file.
+
+Step 3.2 — Test the DB connection
+-----------------------------------
+  $ psql -U axisai_user -h localhost -d axisai_db -c "SELECT version();"
+    (enter your password when prompted)
+    → Should show PostgreSQL 15.x version string
+
+Step 3.3 — Harden Redis (bind to localhost only)
+-------------------------------------------------
+  By default Redis listens on all interfaces. Lock it down:
+
+  $ sudo nano /etc/redis/redis.conf
+
+  Find and change (or confirm these lines):
+    bind 127.0.0.1 -::1
+    protected-mode yes
+
+  Save the file, then restart Redis:
+  $ sudo systemctl restart redis
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — DEPLOY THE APPLICATION CODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 4.1 — Clone the repository
+---------------------------------
+  $ cd /home/axisai
+  $ git clone https://github.com/YOUR_GITHUB_USERNAME/axis-ai.git
+  $ cd axis-ai
+
+  (If your repo is private, you'll need to set up a GitHub deploy key.
+   See Section 9 at the bottom of this file.)
+
+Step 4.2 — Create the Python virtual environment
+-------------------------------------------------
+  $ python3.11 -m venv .venv
+  $ source .venv/bin/activate
+
+  Your prompt should now show (.venv) at the start.
+
+Step 4.3 — Install Python dependencies
+----------------------------------------
+  $ pip install --upgrade pip
+  $ pip install -r requirements.txt
+
+  This will take 2-3 minutes. You should see many packages installing.
+
+Step 4.4 — Create the environment file
+----------------------------------------
+  $ cp .env.example .env
+  $ nano .env
+
+  Fill in every value. Here is what each one means:
+
+  ── Database ──────────────────────────────────────────────────────
+  DATABASE_URL=postgresql+asyncpg://axisai_user:YOUR_DB_PASSWORD@localhost:5432/axisai_db
+    → Replace YOUR_DB_PASSWORD with the password you chose in Step 3.1
+
+  ── Redis ─────────────────────────────────────────────────────────
+  REDIS_URL=redis://127.0.0.1:6379/0
+
+  ── Qdrant ────────────────────────────────────────────────────────
+  QDRANT_URL=http://127.0.0.1:6333
+  QDRANT_API_KEY=
+    → Leave blank (Qdrant is local, no auth needed)
+    → If using Qdrant Cloud instead, fill both in
+
+  ── OpenAI ────────────────────────────────────────────────────────
+  OPENAI_API_KEY=sk-...
+    → Your OpenAI API key from platform.openai.com
+
+  ── Security ──────────────────────────────────────────────────────
+  SECRET_KEY=GENERATE_THIS_WITH_COMMAND_BELOW
+    → Run this to generate: python3.11 -c "import secrets; print(secrets.token_hex(32))"
+    → Paste the output here
+
+  ── App settings ──────────────────────────────────────────────────
+  APP_ENV=production
+  APP_HOST=0.0.0.0
+  APP_PORT=8000
+  LOG_LEVEL=INFO
+
+  ── Model settings (defaults are fine to start) ───────────────────
+  MODEL_EMBED=text-embedding-3-small
+  MODEL_FAST=gpt-4o-mini
+  MODEL_MAIN=gpt-4o
+  MODEL_CHAT=gpt-4o-mini
+  MODEL_CHAT_INTENT=gpt-4o-mini
+  MODEL_CHAT_ADVANCED=gpt-4o
+
+  ── Rate limits (defaults are fine to start) ──────────────────────
+  CHAT_COOLDOWN_SECONDS=2
+  CHAT_MAX_SESSION_MESSAGES=100
+  CHAT_MAX_USER_MESSAGES_DAY=200
+  CHAT_SESSION_TTL_HOURS=4
+  CHAT_MAX_TENANT_TOKENS_MONTH=10000000
+
+  Save the file: Ctrl+O, Enter, Ctrl+X
+
+Step 4.5 — Run database migrations
+-------------------------------------
+  Make sure you are still in the axis-ai directory with .venv active.
+
+  $ alembic upgrade head
+
+  You should see output like:
+    INFO  [alembic.runtime.migration] Running upgrade  -> 001...
+    INFO  [alembic.runtime.migration] Running upgrade 001 -> 002...
+    INFO  [alembic.runtime.migration] Running upgrade 002 -> 003...
+
+  If you see an error, double-check your DATABASE_URL in .env.
+
+Step 4.6 — Test the app runs manually (smoke test)
+----------------------------------------------------
+  $ uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  Open a second terminal and test:
+  $ curl http://localhost:8000/api/v1/health
+
+  You should see something like:
+    {"status":"healthy","db":"ok","redis":"ok","qdrant":"ok"}
+
+  Press Ctrl+C to stop the manual server.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — SET UP SYSTEMD SERVICE (keep app running forever)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+systemd is Linux's process manager. It will start axis-ai on boot
+and automatically restart it if it crashes.
+
+Step 5.1 — Create the service file
+-------------------------------------
+  $ sudo tee /etc/systemd/system/axis-ai.service > /dev/null << 'EOF'
+[Unit]
+Description=axis-ai FastAPI Service
+After=network.target postgresql.service redis.service qdrant.service
+Requires=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=axisai
+Group=axisai
+WorkingDirectory=/home/axisai/axis-ai
+Environment="PATH=/home/axisai/axis-ai/.venv/bin"
+EnvironmentFile=/home/axisai/axis-ai/.env
+ExecStart=/home/axisai/axis-ai/.venv/bin/uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 2 \
+    --loop uvloop \
+    --log-level warning \
+    --no-access-log
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=axis-ai
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  NOTE on --workers 2: Use (2 × CPU cores) + 1 as a rule of thumb.
+  For a 4 vCPU server: --workers 9
+  For a 2 vCPU server: --workers 5
+  For testing/minimal: --workers 2
+
+Step 5.2 — Enable and start the service
+-----------------------------------------
+  $ sudo systemctl daemon-reload
+  $ sudo systemctl enable axis-ai
+  $ sudo systemctl start axis-ai
+
+Step 5.3 — Check it started correctly
+---------------------------------------
+  $ sudo systemctl status axis-ai
+
+  You should see "active (running)" in green.
+  If you see "failed", check logs with:
+  $ sudo journalctl -u axis-ai -n 50 --no-pager
+
+Step 5.4 — Test the running service
+--------------------------------------
+  $ curl http://localhost:8000/api/v1/health
+    → {"status":"healthy","db":"ok","redis":"ok","qdrant":"ok"}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — NGINX REVERSE PROXY + SSL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Nginx sits in front of the app. It handles HTTPS, rate limiting at
+the web layer, large file uploads, and serves as a buffer.
+
+Step 6.1 — Create Nginx config for api.aiaxis.com
+---------------------------------------------------
+  $ sudo tee /etc/nginx/sites-available/axis-ai > /dev/null << 'EOF'
+# Limit request rate at Nginx level (extra protection layer)
+limit_req_zone $binary_remote_addr zone=axis_api:10m rate=30r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.aiaxis.com;
+
+    # Let's Encrypt challenge (needed for SSL certificate)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all HTTP to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api.aiaxis.com;
+
+    # SSL certificates (Certbot fills these in — don't edit)
+    ssl_certificate     /etc/letsencrypt/live/api.aiaxis.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.aiaxis.com/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Security headers
+    add_header X-Frame-Options           "DENY"            always;
+    add_header X-Content-Type-Options    "nosniff"         always;
+    add_header X-XSS-Protection          "1; mode=block"   always;
+    add_header Referrer-Policy           "no-referrer"     always;
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+
+    # Max upload size (for content ingestion — PDFs, SCORM packages)
+    client_max_body_size 200M;
+
+    # Timeouts — AI calls can be slow
+    proxy_connect_timeout  60s;
+    proxy_send_timeout    120s;
+    proxy_read_timeout    120s;
+
+    # Apply rate limit to all API routes
+    location /api/ {
+        limit_req zone=axis_api burst=10 nodelay;
+
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # Health check (no rate limit)
+    location /api/v1/health {
+        proxy_pass       http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Block direct access to anything else
+    location / {
+        return 404;
+    }
+}
+EOF
+
+Step 6.2 — Enable the site
+-----------------------------
+  $ sudo ln -s /etc/nginx/sites-available/axis-ai /etc/nginx/sites-enabled/
+  $ sudo rm -f /etc/nginx/sites-enabled/default
+
+  Test Nginx config is valid:
+  $ sudo nginx -t
+    → nginx: configuration file /etc/nginx/nginx.conf test is successful
+
+Step 6.3 — Issue SSL certificate (HTTPS)
+-----------------------------------------
+  IMPORTANT: api.aiaxis.com must already point to this server's IP
+  in your DNS settings. If it doesn't, this step will fail.
+
+  Start Nginx first (HTTP only, for the ACME challenge):
+  $ sudo systemctl start nginx
+
+  Run Certbot:
+  $ sudo certbot --nginx -d api.aiaxis.com \
+      --non-interactive \
+      --agree-tos \
+      --email YOUR_EMAIL@aiaxis.com \
+      --redirect
+
+  Replace YOUR_EMAIL@aiaxis.com with your real email address.
+  Certbot will:
+    1. Verify you own api.aiaxis.com
+    2. Issue a free SSL certificate
+    3. Automatically edit the Nginx config to fill in cert paths
+    4. Set up automatic renewal
+
+  Verify certificate:
+  $ sudo certbot certificates
+    → Should show api.aiaxis.com with expiry date
+
+Step 6.4 — Restart Nginx with full HTTPS config
+-------------------------------------------------
+  $ sudo systemctl restart nginx
+  $ sudo systemctl enable nginx
+
+Step 6.5 — Test HTTPS
+-----------------------
+  $ curl https://api.aiaxis.com/api/v1/health
+    → {"status":"healthy","db":"ok","redis":"ok","qdrant":"ok"}
+
+  Also test in your browser: https://api.aiaxis.com/api/v1/health
+  You should see the padlock (secure connection).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — CREATE YOUR FIRST TENANT + API KEY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Now that the server is live, create a tenant for your Moodle instance
+and issue an API key that the Moodle plugin will use.
+
+Step 7.1 — Create a tenant
+-----------------------------
+  $ curl -s -X POST https://api.aiaxis.com/api/v1/tenants \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "My School",
+      "slug": "my-school"
+    }' | python3.11 -m json.tool
+
+  You'll get back a JSON object with the tenant's id (UUID).
+  Copy that UUID — you need it for the next step.
+
+  Example response:
+    {
+        "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "name": "My School",
+        "slug": "my-school",
+        "is_active": true,
+        "created_at": "2026-03-29T..."
+    }
+
+Step 7.2 — Issue an API key for that tenant
+---------------------------------------------
+  Replace TENANT_UUID with the id from Step 7.1:
+
+  $ curl -s -X POST https://api.aiaxis.com/api/v1/tenants/TENANT_UUID/keys \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "Moodle Production Key"
+    }' | python3.11 -m json.tool
+
+  Example response:
+    {
+        "id": "yyyyyyyy-...",
+        "name": "Moodle Production Key",
+        "key": "axai_abc123xyz...",
+        "created_at": "2026-03-29T..."
+    }
+
+  IMPORTANT: Copy the "key" value (axai_...) RIGHT NOW.
+  It is shown only once and is never stored in plain text.
+  Paste it into your Moodle plugin settings.
+
+Step 7.3 — Verify the key works
+---------------------------------
+  Replace axai_YOUR_KEY with your actual key:
+
+  $ curl -s https://api.aiaxis.com/api/v1/health \
+    -H "Authorization: Bearer axai_YOUR_KEY"
+    → {"status":"healthy",...}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — VERIFY ALL SERVICES ARE RUNNING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Run this to check every service at once:
+
+  $ sudo systemctl status postgresql redis qdrant nginx axis-ai --no-pager
+
+All five should show "active (running)".
+
+Quick one-liner check:
+  $ for svc in postgresql redis qdrant nginx axis-ai; do
+      echo -n "$svc: "
+      systemctl is-active $svc
+    done
+
+  Should output:
+    postgresql: active
+    redis: active
+    qdrant: active
+    nginx: active
+    axis-ai: active
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9 — LOGS & MONITORING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+View axis-ai application logs (live tail):
+  $ sudo journalctl -u axis-ai -f
+
+View last 100 lines of axis-ai logs:
+  $ sudo journalctl -u axis-ai -n 100 --no-pager
+
+View Nginx access log:
+  $ sudo tail -f /var/log/nginx/access.log
+
+View Nginx error log:
+  $ sudo tail -f /var/log/nginx/error.log
+
+View PostgreSQL logs:
+  $ sudo tail -f /var/log/postgresql/postgresql-15-main.log
+
+Check disk usage (make sure you don't fill up):
+  $ df -h
+
+Check RAM usage:
+  $ free -h
+
+Check if any service is eating too much CPU/RAM:
+  $ top   (press q to quit)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 10 — UPDATING THE APPLICATION (deploying new code)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every time you push new code to GitHub and want to deploy it:
+
+  $ cd /home/axisai/axis-ai
+  $ source .venv/bin/activate
+
+  # Pull latest code
+  $ git pull origin main
+
+  # Install any new dependencies
+  $ pip install -r requirements.txt
+
+  # Run any new database migrations
+  $ alembic upgrade head
+
+  # Restart the app (zero-downtime: systemd restarts workers gracefully)
+  $ sudo systemctl restart axis-ai
+
+  # Check it came back up
+  $ sudo systemctl status axis-ai
+  $ curl https://api.aiaxis.com/api/v1/health
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 11 — BACKUPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+What needs backing up:
+  1. PostgreSQL database (all tenant data, content metadata, chat history)
+  2. Qdrant storage (vector embeddings — expensive to regenerate)
+  3. .env file (your secrets — don't lose this)
+
+Step 11.1 — Create a backup script
+-------------------------------------
+  $ mkdir -p /home/axisai/backups
+
+  $ tee /home/axisai/backup.sh > /dev/null << 'EOF'
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR=/home/axisai/backups
+
+# Backup PostgreSQL
+pg_dump -U axisai_user -h localhost axisai_db \
+  | gzip > $BACKUP_DIR/postgres_$DATE.sql.gz
+
+# Backup Qdrant storage
+sudo systemctl stop qdrant
+tar -czf $BACKUP_DIR/qdrant_$DATE.tar.gz /opt/qdrant/storage
+sudo systemctl start qdrant
+
+# Keep only last 7 days of backups
+find $BACKUP_DIR -name "*.gz" -mtime +7 -delete
+
+echo "Backup done: $DATE"
+EOF
+
+  $ chmod +x /home/axisai/backup.sh
+
+Step 11.2 — Schedule daily backups with cron
+----------------------------------------------
+  $ crontab -e
+
+  Add this line (runs backup at 2 AM every day):
+    0 2 * * * /home/axisai/backup.sh >> /home/axisai/backups/backup.log 2>&1
+
+  Press Ctrl+X, Y, Enter to save.
+
+Step 11.3 — Test the backup
+-----------------------------
+  $ /home/axisai/backup.sh
+  $ ls -lh /home/axisai/backups/
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 12 — SSL CERTIFICATE RENEWAL (automatic)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Let's Encrypt certificates expire every 90 days. Certbot installs
+a cron job that auto-renews them. You don't need to do anything, but
+verify it's set up:
+
+  $ sudo certbot renew --dry-run
+    → "Congratulations, all simulated renewals succeeded"
+
+  The cron timer:
+  $ sudo systemctl status certbot.timer
+    → active (waiting)
+
+  If you want to manually force renewal:
+  $ sudo certbot renew --force-renewal
+  $ sudo systemctl reload nginx
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 13 — OPTIONAL: PRIVATE GITHUB REPO (deploy key)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If your GitHub repo is private, you need a deploy key so the server
+can pull code without a password.
+
+Step 13.1 — Generate a deploy key on the server
+-------------------------------------------------
+  $ ssh-keygen -t ed25519 -C "axis-ai-deploy" -f ~/.ssh/deploy_key -N ""
+  $ cat ~/.ssh/deploy_key.pub
+    → Copy the output (the public key)
+
+Step 13.2 — Add the deploy key to GitHub
+------------------------------------------
+  1. Go to: github.com → Your repo → Settings → Deploy keys
+  2. Click "Add deploy key"
+  3. Title: "axis-ai production server"
+  4. Key: paste the public key from Step 13.1
+  5. Leave "Allow write access" unchecked (read-only is safer)
+  6. Click "Add key"
+
+Step 13.3 — Configure SSH to use the deploy key for GitHub
+------------------------------------------------------------
+  $ tee ~/.ssh/config >> /dev/null << 'EOF'
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/deploy_key
+EOF
+
+Step 13.4 — Clone using SSH instead of HTTPS
+----------------------------------------------
+  $ git clone git@github.com:YOUR_GITHUB_USERNAME/axis-ai.git
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 14 — TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problem: axis-ai service fails to start
+  $ sudo journalctl -u axis-ai -n 50 --no-pager
+  Common causes:
+    - Wrong DATABASE_URL in .env (typo in password or hostname)
+    - PostgreSQL not running: sudo systemctl start postgresql
+    - .env file not found: check path in service file
+    - Python package missing: source .venv/bin/activate && pip install -r requirements.txt
+
+Problem: 502 Bad Gateway in browser
+  Nginx is running but can't reach axis-ai.
+  $ sudo systemctl status axis-ai        # is it running?
+  $ curl http://localhost:8000/api/v1/health   # can localhost reach it?
+  $ sudo journalctl -u axis-ai -n 20
+
+Problem: SSL certificate issue (HTTPS not working)
+  $ sudo certbot certificates          # check certificate status
+  $ sudo nginx -t                      # check Nginx config
+  $ sudo systemctl reload nginx
+
+Problem: "Connection refused" on port 5432 (PostgreSQL)
+  $ sudo systemctl start postgresql
+  $ sudo -u postgres psql -c "\l"      # list databases
+
+Problem: Redis not connecting
+  $ redis-cli ping                     # should return PONG
+  $ sudo systemctl start redis
+
+Problem: Qdrant not responding
+  $ curl http://127.0.0.1:6333/healthz
+  $ sudo systemctl start qdrant
+  $ sudo journalctl -u qdrant -n 30
+
+Problem: Alembic migration fails
+  $ alembic current    # shows current migration state
+  $ alembic history    # shows all migrations
+  Make sure DATABASE_URL is correct and PostgreSQL is running.
+
+Problem: "Permission denied" errors
+  Make sure the axisai user owns the project directory:
+  $ sudo chown -R axisai:axisai /home/axisai/axis-ai
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK REFERENCE — USEFUL COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Start all services:
+  $ sudo systemctl start postgresql redis qdrant nginx axis-ai
+
+Stop all services:
+  $ sudo systemctl stop axis-ai nginx qdrant redis
+
+Restart just the app (after code changes):
+  $ sudo systemctl restart axis-ai
+
+Watch live application logs:
+  $ sudo journalctl -u axis-ai -f
+
+Check health:
+  $ curl https://api.aiaxis.com/api/v1/health
+
+Run full test suite against production:
+  $ cd /home/axisai/axis-ai
+  $ source .venv/bin/activate
+  $ python scripts/test_chat.py --key axai_YOUR_KEY --course 1 --url https://api.aiaxis.com
+
+Check DB directly:
+  $ psql -U axisai_user -h localhost -d axisai_db
+  axisai_db=# SELECT COUNT(*) FROM tenants;
+  axisai_db=# SELECT COUNT(*) FROM content_items;
+  axisai_db=# SELECT COUNT(*) FROM chat_messages;
+  axisai_db=# \q
+
+Check Qdrant collections:
+  $ curl http://127.0.0.1:6333/collections | python3.11 -m json.tool
+
+Check disk usage of Qdrant storage:
+  $ du -sh /opt/qdrant/storage
+
+Manually run a DB backup:
+  $ /home/axisai/backup.sh
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DEPLOYMENT CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Use this to confirm everything is done before connecting Moodle.
+
+  [ ] DNS: api.aiaxis.com → server IP (A record set)
+  [ ] Firewall: ports 22, 80, 443 open; all others closed
+  [ ] PostgreSQL: running, axisai_db created, axisai_user has access
+  [ ] Redis: running, bound to 127.0.0.1
+  [ ] Qdrant: running on 127.0.0.1:6333
+  [ ] axis-ai: systemd service enabled + running
+  [ ] Nginx: running with HTTPS config
+  [ ] SSL: certificate issued for api.aiaxis.com
+  [ ] Health check: curl https://api.aiaxis.com/api/v1/health → OK
+  [ ] Tenant created, API key issued and saved
+  [ ] API key tested against live endpoint
+  [ ] Backups: cron job set for 2 AM daily
+  [ ] SSL renewal: certbot --dry-run passed

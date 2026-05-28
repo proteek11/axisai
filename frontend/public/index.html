@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Axis AI — Intelligent Learning, for Every Platform</title>
+  <meta name="description" content="Axis AI transforms any learning content into summaries, quizzes, flashcards, and RAG-powered chat — standalone or integrated with your LMS." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #1447e6;
+      --blue-light: #eff4ff;
+      --blue-border: #c7d9ff;
+      --bg: #ffffff;
+      --bg-muted: #f8f6f8;
+      --bg-subtle: #f3f1f3;
+      --text: #0c090c;
+      --text-muted: #79697b;
+      --border: #e7e4e7;
+      --radius: 14px;
+      --radius-sm: 8px;
+      --font: 'Instrument Sans', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font-family: var(--font); cursor: pointer; border: none; outline: none; }
+
+    /* UTILITY */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 40px; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.25;
+      margin-bottom: 12px;
+    }
+    .section-sub {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-width: 560px;
+    }
+    .section-head { margin-bottom: 40px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--blue);
+      background: var(--blue-light);
+      border: 1px solid var(--blue-border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      margin-bottom: 22px;
+    }
+    .tag-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); display: inline-block; }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 40px;
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .logo-mark {
+      width: 30px;
+      height: 30px;
+      background: var(--blue);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-muted);
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+    .btn-nav-ghost {
+      font-size: 14px;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 16px;
+      transition: border-color 0.15s;
+    }
+    .btn-nav-ghost:hover { border-color: var(--text-muted); }
+    .btn-nav-primary {
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      background: var(--blue);
+      border-radius: var(--radius-sm);
+      padding: 8px 18px;
+      transition: opacity 0.15s;
+    }
+    .btn-nav-primary:hover { opacity: 0.88; }
+
+    /* HERO */
+    .hero {
+      padding: 80px 40px 70px;
+      max-width: 1120px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+    .hero-left h1 {
+      font-size: 42px;
+      font-weight: 500;
+      line-height: 1.18;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    .hero-left h1 em {
+      font-style: normal;
+      color: var(--blue);
+    }
+    .hero-left p {
+      font-size: 16px;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 32px;
+      max-width: 460px;
+    }
+    .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      color: #fff;
+      background: var(--blue);
+      border-radius: var(--radius-sm);
+      padding: 12px 24px;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 24px;
+      transition: border-color 0.15s;
+    }
+    .btn-ghost:hover { border-color: var(--text-muted); }
+
+    /* Hero visual */
+    .hero-visual {
+      background: var(--bg-muted);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-row { display: flex; gap: 10px; align-items: flex-start; }
+    .chat-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--blue);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .chat-bubble {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      flex: 1;
+    }
+    .chat-bubble.ai {
+      background: var(--blue-light);
+      border-color: var(--blue-border);
+      color: #193cb8;
+    }
+    .chat-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 4px 2px;
+    }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; flex-shrink: 0; }
+    .chip-row { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+    .chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* TRUST BAR */
+    .trust-bar {
+      background: var(--bg-muted);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 22px 40px;
+    }
+    .trust-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .trust-label-text {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      opacity: 0.55;
+      white-space: nowrap;
+    }
+    .trust-divider { width: 1px; height: 30px; background: var(--border); }
+    .trust-stat { text-align: center; }
+    .trust-num {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--text-muted);
+      opacity: 0.6;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .trust-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.45;
+      letter-spacing: 0.03em;
+    }
+
+    /* HOW IT WORKS */
+    .how-section {
+      padding: 80px 40px;
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      position: relative;
+    }
+    .how-grid::before {
+      content: '';
+      position: absolute;
+      top: 22px;
+      left: calc(12.5% + 18px);
+      right: calc(12.5% + 18px);
+      height: 0;
+      border-top: 1.5px dashed var(--blue-border);
+    }
+    .how-step { padding: 0 20px 0 0; }
+    .how-step-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--blue-light);
+      border: 2px solid var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+      position: relative;
+      z-index: 1;
+    }
+    .how-step h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .how-step p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    /* LMS INTEGRATION */
+    .lms-section {
+      background: var(--bg-muted);
+      padding: 70px 40px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .lms-inner { max-width: 1120px; margin: 0 auto; }
+    .lms-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    .lms-step {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+    }
+    .lms-step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--blue);
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+    .lms-step h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+    .lms-step p { font-size: 12px; color: var(--text-muted); line-height: 1.65; }
+
+    /* FEATURES */
+    .features-section {
+      padding: 80px 40px;
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .feat-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+    .feat-card:hover { border-color: var(--blue-border); }
+    .feat-icon-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    .feat-card h4 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .feat-card p { font-size: 13px; color: var(--text-muted); line-height: 1.65; }
+
+    /* Coming soon — spans 2 columns */
+    .feat-card.coming-soon {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, #0d1a4a 0%, #1a2f7a 60%, #0d1a4a 100%);
+      border-color: #2a4acc;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 28px;
+      align-items: center;
+    }
+    .feat-card.coming-soon h4 { color: #fff; font-size: 17px; }
+    .feat-card.coming-soon p { color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.7; }
+    .coming-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.8);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .coming-icon-wrap {
+      width: 96px;
+      height: 96px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* INDUSTRIES */
+    .industries-section {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 40px;
+    }
+    .ind-inner { max-width: 1120px; margin: 0 auto; }
+    .industries-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .ind-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .ind-card:hover { border-color: var(--blue-border); transform: translateY(-2px); }
+    .ind-icon-box {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .ind-card h4 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .ind-card p { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+    /* CTA */
+    .cta-section { padding: 40px; max-width: 1120px; margin: 0 auto 20px; }
+    .cta-box {
+      background: var(--blue);
+      border-radius: var(--radius);
+      padding: 60px;
+      text-align: center;
+    }
+    .cta-box h2 { font-size: 30px; font-weight: 500; color: #fff; margin-bottom: 12px; }
+    .cta-box p { font-size: 16px; color: rgba(255,255,255,0.72); margin-bottom: 32px; }
+    .cta-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-white {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--blue);
+      background: #fff;
+      border-radius: var(--radius-sm);
+      padding: 13px 28px;
+      transition: opacity 0.15s;
+    }
+    .btn-white:hover { opacity: 0.92; }
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      color: #fff;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.38);
+      border-radius: var(--radius-sm);
+      padding: 13px 28px;
+      transition: border-color 0.15s;
+      cursor: pointer;
+    }
+    .btn-outline:hover { border-color: rgba(255,255,255,0.65); }
+
+    /* FOOTER */
+    footer { background: #0a0709; padding: 60px 40px 36px; }
+    .footer-inner { max-width: 1120px; margin: 0 auto; }
+    .footer-top {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr 1fr 1fr;
+      gap: 40px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .footer-logo-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+    .footer-desc {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.75;
+      max-width: 280px;
+      margin-bottom: 22px;
+    }
+    .footer-contact-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.48);
+      margin-bottom: 8px;
+    }
+    .footer-col h5 {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.28);
+      margin-bottom: 16px;
+    }
+    .footer-col a {
+      display: block;
+      font-size: 13px;
+      color: rgba(255,255,255,0.48);
+      margin-bottom: 10px;
+      transition: color 0.15s;
+    }
+    .footer-col a:hover { color: rgba(255,255,255,0.85); }
+    .footer-bottom {
+      padding-top: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer-bottom p { font-size: 12px; color: rgba(255,255,255,0.2); }
+
+    /* RESPONSIVE */
+    @media (max-width: 960px) {
+      .hero { grid-template-columns: 1fr; gap: 40px; padding: 50px 24px 40px; }
+      .hero-left h1 { font-size: 30px; }
+      .how-grid { grid-template-columns: 1fr 1fr; }
+      .how-grid::before { display: none; }
+      .lms-steps { grid-template-columns: 1fr 1fr; }
+      .features-grid { grid-template-columns: 1fr 1fr; }
+      .feat-card.coming-soon { grid-column: 1 / -1; }
+      .industries-grid { grid-template-columns: 1fr 1fr; }
+      .how-section, .features-section, .cta-section { padding: 60px 24px; }
+      .lms-section, .industries-section { padding: 60px 24px; }
+      .footer-top { grid-template-columns: 1fr 1fr; }
+      .nav-links { display: none; }
+      .trust-inner { gap: 20px; }
+    }
+    @media (max-width: 600px) {
+      .how-grid, .lms-steps, .features-grid, .industries-grid { grid-template-columns: 1fr; }
+      .feat-card.coming-soon { grid-column: 1 / -1; grid-template-columns: 1fr; }
+      .coming-icon-wrap { display: none; }
+      .hero-btns { flex-direction: column; }
+      .cta-box { padding: 40px 24px; }
+      .footer-top { grid-template-columns: 1fr; }
+      .trust-inner { flex-wrap: wrap; gap: 20px; justify-content: center; }
+      .trust-divider { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <div class="logo-mark">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5L6.5 12L13 4.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      Axis AI
+    </div>
+    <div class="nav-links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#industries">Industries</a>
+      <a href="#lms-integration">LMS Integration</a>
+    </div>
+    <div class="nav-actions">
+      <a href="/login.html"><button class="btn-nav-ghost">Log in</button></a>
+      <a href="/login.html"><button class="btn-nav-primary">Get started &rarr;</button></a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section>
+  <div class="hero">
+    <div class="hero-left">
+      <div class="tag">
+        <span class="tag-dot"></span>
+        Intelligent learning, for any platform
+      </div>
+      <h1>Turn any content into <em>powerful learning</em> experiences</h1>
+      <p>Axis AI transforms PDFs, videos, web pages, and SCORM content into summaries, quizzes, flashcards, mind maps, and an AI study assistant &mdash; standalone or connected to your LMS.</p>
+      <div class="hero-btns">
+        <a href="/login.html"><button class="btn-primary">Start free &rarr;</button></a>
+        <button class="btn-ghost" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M6 5l3 2.5-3 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          See how it works
+        </button>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="chat-status">
+        <span class="status-dot"></span>
+        Processing: <strong style="color:var(--text);font-size:12px;margin-left:2px;">Advanced SQL Indexing.pdf</strong>
+      </div>
+      <div class="chat-bubble" style="background:var(--blue-light);border-color:var(--blue-border);color:#193cb8;font-size:12px;">
+        &#10003; Summary &nbsp;&middot;&nbsp; 14 quiz questions &nbsp;&middot;&nbsp; 28 flashcards &nbsp;&middot;&nbsp; Glossary ready
+      </div>
+      <div class="chat-row">
+        <div class="chat-bubble">
+          &#128172; &nbsp;"What's the difference between clustered and non-clustered indexes?"
+        </div>
+      </div>
+      <div class="chat-row">
+        <div class="chat-avatar">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3.5 3.5L11 3" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="chat-bubble ai">
+          A clustered index determines the physical order of rows in a table &mdash; each table can only have one. A non-clustered index stores a separate lookup with pointers back to the rows&hellip;
+          <span style="display:block;margin-top:6px;font-size:11px;opacity:0.65;">&#128206; Source: pg. 12 &mdash; SQL Indexing.pdf</span>
+        </div>
+      </div>
+      <div class="chip-row">
+        <span class="chip">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="4" stroke="#79697b" stroke-width="1.2"/><path d="M5 3v2l1.5 1" stroke="#79697b" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Instant answers
+        </span>
+        <span class="chip">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 8.5l7-7M8.5 1.5H6m2.5 0V4" stroke="#79697b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Source-cited
+        </span>
+        <span class="chip">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="4" stroke="#79697b" stroke-width="1.2"/><path d="M3 5h4M5 3v4" stroke="#79697b" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Multilingual
+        </span>
+        <span class="chip">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="1" width="8" height="8" rx="1.5" stroke="#79697b" stroke-width="1.2"/><path d="M3 5h4M3 3h2" stroke="#79697b" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Any format
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST BAR -->
+<div class="trust-bar">
+  <div class="trust-inner">
+    <span class="trust-label-text">Trusted by learning teams at</span>
+    <div class="trust-divider"></div>
+    <div class="trust-stat">
+      <div class="trust-num">50K+</div>
+      <div class="trust-desc">Students served</div>
+    </div>
+    <div class="trust-divider"></div>
+    <div class="trust-stat">
+      <div class="trust-num">99.7%</div>
+      <div class="trust-desc">Uptime SLA</div>
+    </div>
+    <div class="trust-divider"></div>
+    <div class="trust-stat">
+      <div class="trust-num">10+</div>
+      <div class="trust-desc">Content formats</div>
+    </div>
+    <div class="trust-divider"></div>
+    <div class="trust-stat">
+      <div class="trust-num">&lt;2s</div>
+      <div class="trust-desc">Chat response</div>
+    </div>
+    <div class="trust-divider"></div>
+    <div class="trust-stat">
+      <div class="trust-num">400+</div>
+      <div class="trust-desc">TTS voices</div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="how-section">
+    <div class="section-head">
+      <div class="section-label">How Axis AI works</div>
+      <div class="section-title">Learning intelligence in four steps</div>
+      <div class="section-sub">Log in, upload your content, and let Axis AI do the rest. No LMS required &mdash; get started in minutes.</div>
+    </div>
+    <div class="how-grid">
+      <div class="how-step">
+        <div class="how-step-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="3" width="11" height="14" rx="2" stroke="#1447e6" stroke-width="1.5"/>
+            <path d="M14 7.5l3.5 2.5-3.5 2.5" stroke="#1447e6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17.5 10H9" stroke="#1447e6" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h4>Create an account</h4>
+        <p>Sign up in seconds. Get a personal workspace where all your content, AI outputs, and learner activity live together.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-step-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 14V4M10 4L7 7M10 4l3 3" stroke="#1447e6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 15v2a1 1 0 001 1h12a1 1 0 001-1v-2" stroke="#1447e6" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h4>Upload your content</h4>
+        <p>Drop in PDFs, paste a YouTube or Vimeo URL, upload SCORM packages, or a web page &mdash; Axis AI handles all formats.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-step-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" stroke="#1447e6" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M16 15l.6 2L18.5 17.5l-2 .5-.5 2-1-2L13 18l1.5-1.5L14 14.5l2 .5z" stroke="#1447e6" stroke-width="1.2" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h4>AI generates outputs</h4>
+        <p>Summaries, quizzes, flashcards, glossaries, mind maps, FAQs, and chapter breakdowns &mdash; ready in under a minute.</p>
+      </div>
+      <div class="how-step">
+        <div class="how-step-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="15" cy="5" r="2" stroke="#1447e6" stroke-width="1.4"/>
+            <circle cx="15" cy="15" r="2" stroke="#1447e6" stroke-width="1.4"/>
+            <circle cx="5" cy="10" r="2" stroke="#1447e6" stroke-width="1.4"/>
+            <path d="M7 9l6-3M7 11l6 3" stroke="#1447e6" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h4>Share with learners</h4>
+        <p>Invite learners to your space. They get an AI study assistant with source-cited answers drawn from your content.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" style="background:var(--bg-muted);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="features-section" style="background:transparent;">
+    <div class="section-head">
+      <div class="section-label">What you can do</div>
+      <div class="section-title">Everything a learner needs</div>
+      <div class="section-sub">Ten AI output types, RAG chat, multilingual support &mdash; generated automatically from your existing content.</div>
+    </div>
+    <div class="features-grid">
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#eff4ff;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="16" height="16" rx="2.5" stroke="#1447e6" stroke-width="1.5"/><path d="M7 8h8M7 11h8M7 14h5" stroke="#1447e6" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </div>
+        <h4>Smart summaries</h4>
+        <p>Auto-generated concise summaries from any content &mdash; PDFs, videos, web pages, SCORM. Instant, readable, accurate.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#f0fdf4;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="16" height="16" rx="2.5" stroke="#16a34a" stroke-width="1.5"/><path d="M7 11l3 3 5-5" stroke="#16a34a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h4>Quiz generator</h4>
+        <p>MCQ, true/false, and short-answer questions with answer explanations &mdash; ready to embed or export in seconds.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#fff7ed;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4.5" y="6.5" width="13" height="9" rx="2" stroke="#ea580c" stroke-width="1.5"/><rect x="2.5" y="4.5" width="13" height="9" rx="2" stroke="#ea580c" stroke-width="1.3" stroke-dasharray="3 2.5"/></svg>
+        </div>
+        <h4>Flashcard decks</h4>
+        <p>Spaced-repetition ready flashcard sets extracted automatically. Perfect for exam prep and long-term retention.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#fdf4ff;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 5.5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 3.5v-3.5H6a2 2 0 01-2-2V5.5z" stroke="#9333ea" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 9h6M8 12h4" stroke="#9333ea" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </div>
+        <h4>RAG-powered chat</h4>
+        <p>Learners ask questions in natural language and get source-cited answers pulled directly from your course content.</p>
+      </div>
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#fef2f2;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="3" stroke="#dc2626" stroke-width="1.5"/><circle cx="11" cy="4" r="1.5" stroke="#dc2626" stroke-width="1.3"/><circle cx="18" cy="11" r="1.5" stroke="#dc2626" stroke-width="1.3"/><circle cx="4" cy="11" r="1.5" stroke="#dc2626" stroke-width="1.3"/><circle cx="11" cy="18" r="1.5" stroke="#dc2626" stroke-width="1.3"/><path d="M11 8V5.5M15 11h2.5M11 14v2.5M6.5 11H8.5" stroke="#dc2626" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </div>
+        <h4>Mind maps &amp; glossary</h4>
+        <p>Visual mind maps, key term glossaries, FAQs, and Bloom's taxonomy-aligned learning objectives &mdash; all auto-generated.</p>
+      </div>
+
+
+      <div class="feat-card">
+        <div class="feat-icon-wrap" style="background:#ecfdf5;">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 6h14M4 10h10M4 14h12M4 18h8" stroke="#059669" stroke-width="1.5" stroke-linecap="round"/><circle cx="17" cy="16" r="3.5" stroke="#059669" stroke-width="1.4"/><path d="M15.5 16l1 1 2-2" stroke="#059669" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h4>Objectives &amp; Bloom's</h4>
+        <p>Auto-generated learning objectives, chapter outlines, and Bloom's taxonomy-mapped outcomes for every piece of content.</p>
+      </div>
+
+      <!-- COMING SOON — Video creation — full width -->
+      <div class="feat-card coming-soon">
+        <div>
+          <div class="coming-badge">
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="rgba(255,255,255,0.75)"><path d="M4.5 1l.9 2.7H8L5.8 5.4l.9 2.6-2.2-1.6-2.2 1.6.9-2.6L1 3.7h2.6L4.5 1z"/></svg>
+            Coming soon
+          </div>
+          <h4>Automatic video creation</h4>
+          <p>Transform any course material into a fully narrated video &mdash; slides, TTS voiceover in 400+ languages, and chapter markers included. Upload a PDF or paste a topic and Axis AI builds the entire video end-to-end.</p>
+        </div>
+        <div class="coming-icon-wrap">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="4" y="9" width="28" height="20" rx="3.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.8"/>
+            <path d="M32 16.5l9-5v15l-9-5v-5z" stroke="rgba(255,255,255,0.45)" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M4 33h28M10 38h16" stroke="rgba(255,255,255,0.25)" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M16 15.5l7 3.5-7 3.5v-7z" fill="rgba(255,255,255,0.4)"/>
+            <circle cx="38" cy="38" r="7" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" stroke-width="1.3"/>
+            <path d="M36 38l2 1.5-2 1.5V38z" fill="rgba(255,255,255,0.5)"/>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- INDUSTRIES -->
+<section id="industries">
+  <div class="industries-section">
+    <div class="ind-inner">
+      <div class="section-head">
+        <div class="section-label">Industries we serve</div>
+        <div class="section-title">Built for every learning context</div>
+        <div class="section-sub">From corporate compliance to higher education &mdash; Axis AI adapts to your sector's specific learning needs.</div>
+      </div>
+      <div class="industries-grid">
+
+        <div class="ind-card">
+          <div class="ind-icon-box" style="background:#eff4ff;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M3 18.5l9-9 9 9" stroke="#1447e6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12 9.5V3.5" stroke="#1447e6" stroke-width="1.6" stroke-linecap="round"/>
+              <rect x="6" y="14" width="12" height="7" rx="1" stroke="#1447e6" stroke-width="1.4"/>
+              <rect x="9" y="14" width="6" height="7" stroke="#1447e6" stroke-width="1.2"/>
+            </svg>
+          </div>
+          <div>
+            <h4>Higher Education</h4>
+            <p>Universities and colleges delivering AI-powered study tools to thousands of enrolled students.</p>
+          </div>
+        </div>
+
+        <div class="ind-card">
+          <div class="ind-icon-box" style="background:#fff7ed;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="2" y="8" width="20" height="13" rx="2" stroke="#ea580c" stroke-width="1.5"/>
+              <path d="M8 8V6a2 2 0 014 0v2" stroke="#ea580c" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="12" cy="14.5" r="1.8" stroke="#ea580c" stroke-width="1.3"/>
+              <path d="M12 16.3v2" stroke="#ea580c" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <h4>Corporate Training</h4>
+            <p>L&amp;D teams turning policy docs, SOPs, and training decks into interactive learning modules.</p>
+          </div>
+        </div>
+
+        <div class="ind-card">
+          <div class="ind-icon-box" style="background:#f0fdf4;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="10" width="18" height="11" rx="2" stroke="#16a34a" stroke-width="1.5"/>
+              <path d="M3 10l9-7 9 7" stroke="#16a34a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 21v-5h6v5" stroke="#16a34a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12 7v2M10 8h4" stroke="#16a34a" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <h4>BFSI</h4>
+            <p>Banks, financial services, and fintech firms upskilling teams on products, regulations, and compliance.</p>
+          </div>
+        </div>
+
+        <div class="ind-card">
+          <div class="ind-icon-box" style="background:#fdf4ff;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="4" width="16" height="16" rx="3" stroke="#9333ea" stroke-width="1.5"/>
+              <path d="M12 8v8M8 12h8" stroke="#9333ea" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <h4>Healthcare</h4>
+            <p>Hospitals and clinical organisations digitising training manuals, drug protocols, and CPD programmes.</p>
+          </div>
+        </div>
+
+        <div class="ind-card">
+          <div class="ind-icon-box" style="background:#fef2f2;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l9 4V13c0 4.5-4 7.5-9 8-5-0.5-9-3.5-9-8V7l9-4z" stroke="#dc2626" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M9 12l2.5 2.5 4-4" stroke="#dc2626" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h4>Insurance</h4>
+            <p>Insurers and brokers building AI-assisted onboarding, product knowledge bases, and claims training.</p>
+          </div>
+        </div>
+
+  </div>
+</section>
+
+<!-- LMS INTEGRATION -->
+<section id="lms-integration">
+  <div class="lms-section">
+    <div class="lms-inner">
+      <div class="section-head">
+        <div class="section-label">Integration with LMS</div>
+        <div class="section-title">Already running Moodle? Plug straight in.</div>
+        <div class="section-sub">The Axis AI Moodle plugin connects to your existing instance in minutes &mdash; no data migration, no disruption to enrolled learners.</div>
+      </div>
+      <div class="lms-steps">
+        <div class="lms-step">
+          <div class="lms-step-badge">1</div>
+          <h4>Install the plugin</h4>
+          <p>Download the Axis AI local plugin from the Moodle marketplace. One API key, zero additional config. Works with Moodle 4.x and above.</p>
+        </div>
+        <div class="lms-step">
+          <div class="lms-step-badge">2</div>
+          <h4>Ingest your courses</h4>
+          <p>Point Axis AI at any course module &mdash; PDFs, YouTube, SCORM, Vimeo, or Moodle page HTML. Everything is processed automatically in the background.</p>
+        </div>
+        <div class="lms-step">
+          <div class="lms-step-badge">3</div>
+          <h4>AI outputs appear instantly</h4>
+          <p>Summaries, quizzes, flashcards, and mind maps surface inside your existing Moodle course view &mdash; no new interface to learn.</p>
+        </div>
+        <div class="lms-step">
+          <div class="lms-step-badge">4</div>
+          <h4>Students learn smarter</h4>
+          <p>Every enrolled student gets an AI study assistant that answers questions with citations drawn from your actual course material.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section>
+  <div class="cta-section">
+    <div class="cta-box">
+      <h2>Ready to transform how your learners study?</h2>
+      <p>Join thousands of educators and L&amp;D teams using Axis AI to deliver smarter learning experiences &mdash; standalone or embedded in your LMS.</p>
+      <div class="cta-btns">
+        <a href="/login.html"><button class="btn-white">Start free trial &rarr;</button></a>
+        <button class="btn-outline">Book a demo</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="footer-logo-row">
+          <div class="logo-mark">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2.5 8L6 11.5L12.5 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          Axis AI
+        </div>
+        <p class="footer-desc">AI-powered learning intelligence for any platform. Summaries, quizzes, flashcards, and RAG chat &mdash; from your existing content.</p>
+        <div class="footer-contact-item">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" opacity="0.6"><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="rgba(255,255,255,0.7)" stroke-width="1.2"/><path d="M1 4.5l6 3.5 6-3.5" stroke="rgba(255,255,255,0.7)" stroke-width="1.2" stroke-linecap="round"/></svg>
+          support@edzlms.com
+        </div>
+        <div class="footer-contact-item">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" opacity="0.6"><path d="M2 2.5h2.5l1 3-1.5 1a8.5 8.5 0 003.5 3.5l1-1.5 3 1V12a1 1 0 01-1 1C5 13 1 9 1 3.5a1 1 0 011-1z" stroke="rgba(255,255,255,0.7)" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          +91 98765 43210
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Product</h5>
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#">Pricing</a>
+        <a href="#">Changelog</a>
+        <a href="#">API docs</a>
+      </div>
+      <div class="footer-col">
+        <h5>Use cases</h5>
+        <a href="#">Higher Ed</a>
+        <a href="#">Corporate L&amp;D</a>
+        <a href="#">BFSI</a>
+        <a href="#">Healthcare</a>
+        <a href="#">Insurance</a>
+        <a href="#">EdTech SaaS</a>
+      </div>
+      <div class="footer-col">
+        <h5>Company</h5>
+        <a href="#">About EDZLMS</a>
+        <a href="#">Privacy policy</a>
+        <a href="#">Terms of service</a>
+        <a href="#">Contact us</a>
+        <a href="/login.html">Log in</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 EDZLMS &middot; Axis AI. All rights reserved.</p>
+      <p>Powered by OpenAI &amp; Anthropic</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

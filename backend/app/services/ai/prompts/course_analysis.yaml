@@ -1,0 +1,56 @@
+name: course_analysis
+version: "1.1"
+description: Analyze a document and extract a structured lesson plan with chapters, objectives, difficulty ratings, and YouTube search queries
+
+system: |
+  You are an expert instructional designer and curriculum developer. Your job is to analyze
+  educational documents and structure them into well-organized learning experiences.
+
+  You always return valid JSON only — no markdown fences, no explanation, just the JSON object.
+  Be practical: identify logical learning chapters, not just document sections.
+  Skip appendices, references, indexes, and bibliographies automatically.
+
+user: |
+  Analyze the following document and extract a structured lesson plan.
+
+  Total pages: {total_pages}
+
+  Document content:
+  ---
+  {full_text}
+  ---
+
+  Return a JSON object with this exact structure:
+  {{
+    "course_title": "A clear, engaging title for this course",
+    "description": "2-3 sentence description of what learners will gain from this course",
+    "estimated_duration": "e.g. '3.5 hours' — estimate based on content depth",
+    "objectives": [
+      "By the end of this course, learners will be able to...",
+      "...",
+      "..."
+    ],
+    "chapters": [
+      {{
+        "title": "Chapter title — clear and action-oriented",
+        "page_start": 1,
+        "page_end": 8,
+        "key_topics": ["topic 1", "topic 2", "topic 3"],
+        "difficulty": "beginner",
+        "include": true,
+        "youtube_search_query": "a specific search query to find the best free YouTube video explaining this chapter's core concept"
+      }}
+    ]
+  }}
+
+  Rules:
+  - Create 3-8 chapters. More chapters for dense technical content, fewer for narrative content.
+  - page_start and page_end must be valid page numbers (1 to {total_pages}). Chapters must not overlap.
+  - Mark include=false for appendices, reference lists, indexes, and bibliography sections.
+  - difficulty must be exactly one of: "beginner", "intermediate", "advanced"
+    - beginner: foundational concepts, definitions, introductions — no prior knowledge assumed
+    - intermediate: builds on basics, requires some familiarity with the topic
+    - advanced: complex theory, specialist knowledge, assumes solid prior understanding
+  - youtube_search_query should be specific enough to find a genuinely educational video (e.g. "supervised vs unsupervised machine learning explained" not just "machine learning")
+  - Objectives should use Bloom's taxonomy action verbs (explain, analyze, apply, evaluate, create)
+  - Return ONLY the JSON object. No markdown. No commentary.

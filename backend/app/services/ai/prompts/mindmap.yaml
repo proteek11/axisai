@@ -1,0 +1,58 @@
+name: mindmap
+version: v1
+description: Generates a hierarchical mind map structure from content
+
+temperature: 0.3
+max_tokens: 2000
+
+system: |
+  You are an expert at visual knowledge organization. Create mind map structures
+  that reveal the hierarchical relationships between concepts in educational content.
+
+  Mind map principles:
+  - Central node: the core topic/title
+  - Level 1: 4-8 main branches (major themes/sections)
+  - Level 2: 2-5 sub-nodes per branch (specific concepts)
+  - Level 3 (optional): further detail where genuinely needed
+  - Keep node text concise (2-5 words per node)
+  - Show relationships, not just topics
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every node title
+  in the JSON must be written in {language}.
+
+  Always respond with valid JSON only.
+
+user: |
+  Create a mind map structure for the following educational content.
+
+  Content Title: {title}
+  Language: {language}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure (recursive tree):
+  {{
+    "root": {{
+      "id": "root",
+      "title": "{title}",
+      "children": [
+        {{
+          "id": "branch_1",
+          "title": "Main Branch 1",
+          "color": "#4A90D9",
+          "children": [
+            {{
+              "id": "branch_1_1",
+              "title": "Sub-concept",
+              "children": []
+            }}
+          ]
+        }}
+      ]
+    }},
+    "total_nodes": 25,
+    "max_depth": 3
+  }}

@@ -1,0 +1,545 @@
+axis-ai — Technical Architecture
+==================================
+Last updated: April 2026
+
+
+TECHNOLOGY STACK
+----------------
+Language        Python 3.11
+Framework       FastAPI (async, ASGI via Uvicorn)
+ORM             SQLAlchemy 2.0 (fully async, asyncpg driver)
+Migrations      Alembic (versioned, applied on container startup)
+Database        PostgreSQL 15
+Vector DB       Qdrant (self-hosted or Qdrant Cloud)
+Cache / RL      Redis 7
+Task Queue      Celery (Redis broker) — all heavy processing is async
+AI Gateway      LiteLLM (unified interface over OpenAI-compatible APIs)
+Embeddings      OpenAI text-embedding-3-small (1536 dims)
+LLM (fast)      gpt-4o-mini  (intent classify, cheap tasks)
+LLM (main)      gpt-4o       (answer generation, content outputs)
+HTTP Client     httpx (async, used by URL-fetch fallback in MoodlePageExtractor)
+HTML Parsing    beautifulsoup4 (page content extraction + iframe detection)
+PDF Parsing     pdfplumber
+Video Captions  yt-dlp (YouTube), Vimeo API, PeerTube API
+Logging         structlog (JSON, request_id on every line)
+Containerised   Docker + Docker Compose (local dev)
+
+
+REPOSITORY STRUCTURE
+---------------------
+axis-ai/
+├── app/
+│   ├── main.py                      # FastAPI app factory, lifespan, middleware
+│   ├── config.py                    # Pydantic Settings (env-based, typed)
+│   ├── api/
+│   │   └── v1/
+│   │       ├── router.py            # Mounts all sub-routers under /api/v1
+│   │       ├── health.py            # GET /health
+│   │       ├── ingest.py            # Content ingestion (URL, file, structured)
+│   │       ├── jobs.py              # Job status polling
+│   │       ├── content.py           # Read-only learner-facing output endpoints
+│   │       ├── crud.py              # Teacher management (summary/glossary/
+│   │       │                        #   flashcards/quiz CRUD + regenerate)
+│   │       ├── chat.py              # Chat sessions + message send
+│   │       ├── kb.py                # Knowledge Base management
+│   │       └── admin.py             # Admin: tenant management + reporting
+│   ├── core/
+│   │   ├── database.py              # Async SQLAlchemy engine + session factory
+│   │   ├── security.py              # API key hashing + bearer token validation
+│   │   ├── redis.py                 # Redis pool + Lua rate-limit scripts
+│   │   ├── qdrant.py                # Qdrant client singleton
+│   │   └── exceptions.py           # Typed exception hierarchy
+│   ├── models/
+│   │   ├── tenant.py                # Tenant, ApiKey, UserTokenOverride
+│   │   ├── content.py               # ContentItem (ContentType enum), ExtractedContent
+│   │   ├── output.py                # AIOutput (OutputType enum), QuizQuestion
+│   │   ├── flashcard.py             # FlashcardItem (pool table)
+│   │   ├── glossary.py              # GlossaryTerm (pool table)
+│   │   ├── transcript.py            # Transcript (TranscriptSource enum)
+│   │   ├── job.py                   # ProcessingJob (JobType, JobStatus enums)
+│   │   ├── chat.py                  # ChatSession, ChatMessage (enums)
+│   │   ├── learning_event.py        # UserLearningEvent, LearningEventType
+│   │   ├── kb.py                    # KBItem (KB pool for support chat)
+│   │   ├── rate_limit.py            # RateLimitRule
+│   │   └── audit.py                 # AuditLog
+│   ├── schemas/
+│   │   ├── ingest.py                # IngestURLRequest, StructuredIngestRequest
+│   │   ├── output.py                # All output response schemas (TranscriptResponse,
+│   │   │                            #   FAQResponse, ChaptersResponse, etc.)
+│   │   ├── chat.py                  # Chat request/response schemas
+│   │   ├── job.py                   # Job status response schemas
+│   │   └── admin.py                 # Admin request/response schemas
+│   ├── services/
+│   │   ├── pipeline.py              # Full ingest+extract+embed+generate pipeline
+│   │   ├── regenerate.py            # On-demand output regeneration service
+│   │   ├── transcript_translator.py # Transcript translation utilities
+│   │   ├── ai/
+│   │   │   ├── client.py            # AIClient wrapper around LiteLLM
+│   │   │   └── prompts/
+│   │   │       ├── loader.py        # YAML prompt loader + version tracking
+│   │   │       ├── chat_answer.yaml # Mode-parameterised chat prompt (study +
+│   │   │       │                    #   support modes via template variables)
+│   │   │       ├── intent_detect.yaml
+│   │   │       ├── summary.yaml
+│   │   │       ├── glossary.yaml
+│   │   │       ├── flashcards.yaml
+│   │   │       ├── quiz.yaml
+│   │   │       ├── faq.yaml
+│   │   │       ├── infographic.yaml
+│   │   │       ├── chapters.yaml
+│   │   │       ├── mindmap.yaml
+│   │   │       ├── objectives.yaml
+│   │   │       └── blooms.yaml
+│   │   ├── extractors/
+│   │   │   ├── base.py              # BaseExtractor, ExtractedContent dataclass
+│   │   │   ├── pdf.py               # PDFExtractor (pdfplumber)
+│   │   │   ├── youtube.py           # YouTubeExtractor (yt-dlp, multilingual)
+│   │   │   ├── vimeo.py             # VimeoExtractor (Vimeo API, token required)
+│   │   │   ├── peertube.py          # PeerTubeExtractor (PeerTube API)
+│   │   │   └── page.py              # MoodlePageExtractor (html_page type)
+│   │   │                            #   Mode A: html_content from metadata
+│   │   │                            #   Mode B: httpx URL fetch fallback
+│   │   ├── chunkers/
+│   │   │   ├── base.py              # ChunkingConfig, get_chunker() factory
+│   │   │   ├── recursive.py         # RecursiveChunker (default)
+│   │   │   └── token.py             # TokenChunker
+│   │   ├── generators/
+│   │   │   ├── base.py              # BaseGenerator
+│   │   │   ├── summary.py
+│   │   │   ├── glossary.py          # + save_terms_to_db()
+│   │   │   ├── flashcards.py        # + save_cards_to_db()
+│   │   │   ├── quiz.py              # + save_questions_to_db()
+│   │   │   ├── faq.py
+│   │   │   ├── infographic.py
+│   │   │   ├── chapters.py          # Uses timed segments for timestamps
+│   │   │   ├── mindmap.py
+│   │   │   ├── objectives.py
+│   │   │   └── blooms.py
+│   │   ├── chat/
+│   │   │   ├── orchestrator.py      # Entry point for all chat operations;
+│   │   │   │                        #   passes chat_mode to builder/retriever/
+│   │   │   │                        #   parser; strips quiz_me + visualize
+│   │   │   │                        #   suggestions for support mode sessions
+│   │   │   ├── intent.py            # Intent classification + language detection
+│   │   │   ├── retriever.py         # Qdrant RAG retrieval + confidence scoring;
+│   │   │   │                        #   support mode uses must_not: is_active=False
+│   │   │   │                        #   (backward-compatible with old chunks)
+│   │   │   ├── builder.py           # Prompt assembly (history + context blocks);
+│   │   │   │                        #   injects mode-specific system block,
+│   │   │   │                        #   context_label, no_context_label,
+│   │   │   │                        #   suggestions_example into chat_answer.yaml
+│   │   │   ├── parser.py            # LLM response parsing + validation;
+│   │   │   │                        #   mode-specific default messages
+│   │   │   │                        #   (SUPPORT_DEFAULT_MESSAGES dict)
+│   │   │   ├── sanitizer.py         # Input sanitization + injection detection
+│   │   │   ├── rate_limiter.py      # 4-layer Redis rate limiter
+│   │   │   └── learning_events.py   # UserLearningEvent write helpers
+│   │   └── vector/
+│   │       ├── embedder.py          # Batch embedding + Redis cache
+│   │       └── store.py             # QdrantStore — upsert + search helpers
+│   └── tasks/
+│       ├── celery_app.py            # Celery app instance (Redis broker)
+│       ├── process_content.py       # Celery task: run_pipeline()
+│       ├── process_kb.py            # Celery task: run_kb_pipeline()
+│       │                            #   fetch/extract → chunk → embed →
+│       │                            #   delete old vectors → upsert new vectors
+│       ├── generate_outputs.py      # Celery task: on-demand generation
+│       └── maintenance.py           # Celery task: cleanup / stale detection
+├── alembic/
+│   └── versions/                    # Versioned DB migrations
+├── .env.example
+├── docker-compose.yml
+├── Dockerfile
+└── pyproject.toml                   # Dependencies (replaces requirements.txt)
+
+
+DATABASE SCHEMA (PostgreSQL)
+-----------------------------
+
+tenants
+  id (UUID PK), name, slug, is_active, settings (JSONB),
+  token_monthly_limit, chat_session_msg_limit,
+  chat_daily_msg_limit, chat_monthly_msg_limit,
+  created_at, updated_at
+
+api_keys
+  id (UUID PK), tenant_id (FK), key_hash (SHA-256), name,
+  is_active, last_used_at, created_at
+
+user_token_overrides
+  id (UUID PK), tenant_id (FK), moodle_user_id,
+  chat_session_msg_limit, chat_daily_msg_limit,
+  chat_monthly_msg_limit, token_monthly_limit,
+  note, set_by_user_id, created_at, updated_at
+
+content_items
+  id (UUID PK), tenant_id (FK), moodle_course_id, moodle_cmid,
+  content_type (ContentType enum), title, source_url,
+  language, status (ContentStatus enum), error_message,
+  chunk_count, word_count, content_hash (SHA-256),
+  moodle_metadata (JSONB), created_at, updated_at
+  UNIQUE(tenant_id, moodle_cmid)
+
+extracted_content
+  id (UUID PK), content_item_id (FK), raw_text, page_count,
+  word_count, extraction_metadata (JSONB), created_at
+
+processing_jobs
+  id (UUID PK), content_item_id (FK, nullable — NULL for KB jobs),
+  kb_item_id (FK, nullable — set for KB processing jobs),
+  tenant_id (FK),
+  job_type (JobType enum), status (JobStatus enum),
+  progress (0-100), progress_message, job_config (JSONB),
+  error_message, error_traceback, started_at, completed_at,
+  created_at, updated_at
+  job_config for KB jobs: {inline_text, doc_type, reindex (bool)}
+
+ai_outputs
+  id (UUID PK), content_item_id (FK), tenant_id (FK), job_id (FK),
+  output_type (OutputType enum), language, status (active/superseded),
+  payload (JSONB), edited_content (JSONB),
+  model, provider, prompt_version, prompt_tokens, completion_tokens,
+  confidence, quality_reviewed, quality_rating,
+  is_teacher_edited, last_edited_by, last_edited_at,
+  created_at, updated_at
+
+flashcard_items
+  id (UUID PK), content_item_id (FK), tenant_id (FK), ai_output_id (FK),
+  front, back, position, is_active, generation_batch, created_at, updated_at
+
+glossary_terms
+  id (UUID PK), content_item_id (FK), tenant_id (FK), ai_output_id (FK),
+  term, definition, context_note, is_active, created_at, updated_at
+
+quiz_questions
+  id (UUID PK), content_item_id (FK), tenant_id (FK), ai_output_id (FK),
+  question_text, answer, options_json (JSONB),
+  question_type (QuestionType enum), blooms_level, difficulty,
+  is_active, generation_batch, created_at, updated_at
+
+transcripts
+  id (UUID PK), content_item_id (FK), language,
+  source (TranscriptSource enum), full_text, word_count,
+  segments (JSONB — [{start_sec, end_sec, text}]),
+  created_at, updated_at
+  UNIQUE(content_item_id, language)
+
+chat_sessions
+  id (UUID PK), tenant_id (FK), moodle_user_id, moodle_course_id,
+  moodle_cmid, chat_mode, axis_session_id, language, title,
+  message_count, is_active, session_summary, current_topic_tags,
+  total_cost_usd, ended_at, created_at, updated_at
+
+chat_messages
+  id (UUID PK), tenant_id (FK), session_id (FK), role (user/assistant),
+  content, intent, response_type, confidence_score, render_hint,
+  visual_data (JSONB), suggestions (JSONB), latency_ms,
+  suggestion_clicked_id, rag_chunks_retrieved, rag_chunks_used,
+  tokens_prompt, tokens_completion, cost_usd, created_at
+
+user_learning_events
+  id (UUID PK), tenant_id (FK), moodle_user_id, moodle_course_id,
+  moodle_cmid, event_type (LearningEventType enum), topic_tags (JSONB),
+  content_item_ids (JSONB), intent, response_type, confidence_score,
+  chat_session_id (FK), chat_message_id (FK),
+  event_metadata (JSONB), created_at
+
+kb_items
+  id (UUID PK), tenant_id (FK),
+  title,
+  source_url (TEXT, nullable — set for URL-ingested items),
+  doc_type (TEXT — support/policy/how_to/faq/announcement/other),
+  content (TEXT, nullable — stores the original text for text/file items;
+           used for re-indexing without re-uploading; NULL for URL items),
+  status (TEXT — pending/processing/ready/failed),
+  is_active (BOOLEAN, default True — controls Qdrant retrieval visibility),
+  metadata (JSONB),
+  created_at, updated_at
+
+rate_limit_rules
+  id (UUID PK), tenant_id (FK), scope (user/tenant/global),
+  limit_type, limit_value, window_seconds, created_at
+
+audit_logs
+  id (UUID PK), tenant_id (FK), actor_user_id, action, resource_type,
+  resource_id, before_state (JSONB), after_state (JSONB),
+  ip_address, created_at
+
+
+VECTOR DATABASE (Qdrant)
+--------------------------
+Two collections:
+
+axis_content_chunks  — course content
+  Point: {id: UUID, vector: float[1536]}
+  Payload: {tenant_id, content_item_id, moodle_course_id, moodle_cmid,
+            chunk_index, title, text_preview}
+  Filter: always tenant_id + moodle_course_id; optionally moodle_cmid
+
+axis_kb_chunks  — support knowledge base
+  Point: {id: UUID, vector: float[1536]}
+  Payload: {tenant_id, kb_item_id, doc_type, title, language,
+            chunk_index, chunk_hash, content_hash, text, is_active}
+  Filter: always tenant_id
+  Retrieval filter: must_not is_active=False
+    (includes chunks where is_active=True OR field is absent — backward
+     compatible with items ingested before is_active was added to the upsert)
+  Deactivation filter: is_active=False explicitly set via set_payload()
+
+Similarity: Cosine distance
+Min score threshold: 0.35 (configurable via CHAT_RAG_MIN_SCORE env var)
+
+
+CONTENT TYPE ROUTING
+---------------------
+Moodle sends content_type string → ingest.py validates against ContentType enum
+→ pipeline.py EXTRACTOR_REGISTRY maps to extractor class:
+
+  "pdf"       → PDFExtractor
+  "youtube"   → YouTubeExtractor
+  "vimeo"     → VimeoExtractor
+  "peertube"  → PeerTubeExtractor
+  "html_page" → MoodlePageExtractor  (Mode A: html_content metadata;
+                                       Mode B: httpx URL fetch fallback)
+  "scorm"     → StructuredIngestRequest path (no extractor needed)
+  "h5p"       → StructuredIngestRequest path (no extractor needed)
+
+NOTE: The old key "page" was renamed to "html_page" to match the ContentType
+enum value (HTML_PAGE = "html_page"). The two systems use "html_page" end-to-end.
+Do NOT re-introduce "page" as a content_type value anywhere.
+
+
+PIPELINE FLOW (Celery task: run_pipeline)
+------------------------------------------
+  1.  Load ProcessingJob + ContentItem from DB
+  2.  Mark job PROCESSING, content_item PROCESSING
+  3.  Run extractor (by content_type from EXTRACTOR_REGISTRY)
+  4.  Resolve source language (extractor detection > Moodle hint > "en")
+  5.  Save ExtractedContent to DB
+  6.  Save Transcript records (video types, all language tracks)
+  7.  Chunk raw_text (strategy from job_config.options)
+  8.  Embed chunks in batches (Redis-cached embeddings)
+  9.  Update content_hash + chunk_count on ContentItem
+  10. Upsert chunk vectors to Qdrant
+  11. For each requested task (in job_config.tasks):
+       a. Map task name → OutputType → generator class
+       b. Generate payload (with output_language, count options)
+       c. Supersede old ACTIVE outputs for that type + language
+       d. Save new AIOutput record
+       e. For pool types (quiz/flashcards/glossary): save to pool table
+  12. Mark ContentItem READY, job COMPLETED (100%)
+  On any error: mark job FAILED with traceback, content_item remains at
+  last known status (does not reset to PENDING)
+
+
+KB PIPELINE FLOW (Celery task: run_kb_pipeline)
+-------------------------------------------------
+  1.  Load ProcessingJob + KBItem from DB
+  2.  Mark job PROCESSING, kb_item status=processing
+  3.  Get text source:
+       a. If job_config.inline_text is set → use that directly (text/file ingest
+          or reindex with new content)
+       b. Otherwise → fetch + scrape source_url (URL ingest)
+  4.  Chunk text
+  5.  Embed chunks (same batch embedder, Redis-cached)
+  6.  Delete existing Qdrant vectors for this kb_item_id (always — ensures
+      clean reindex on both first ingest and subsequent reindex calls)
+  7.  Upsert new chunk vectors with full payload:
+       {tenant_id, kb_item_id, doc_type, title, language,
+        chunk_index, chunk_hash, content_hash, text, is_active=True}
+  8.  Mark kb_item status=ready, is_active=True, job COMPLETED
+  On error: mark job FAILED, kb_item status=failed
+
+
+AUTHENTICATION FLOW
+--------------------
+1. Moodle plugin stores API key (issued by POST /api/v1/admin/tenants/{id}/keys)
+2. Every request: Authorization: Bearer axai_<raw_key>
+3. axis-ai: SHA-256 hash of raw key → lookup in api_keys table
+4. If found + active + tenant active → inject tenant_id into all queries
+5. Raw key never stored or logged anywhere
+
+Multi-tenancy: tenant_id is a mandatory filter on every table query and every
+Qdrant search. Cross-tenant data access is architecturally impossible via the API.
+
+
+RATE LIMITING (4 layers, Redis Lua — atomic)
+---------------------------------------------
+Layer 1  Cooldown        chat:cd:{tenant}:{user}               TTL=2s
+         (per message, set BEFORE processing — prevents race condition)
+
+Layer 2  Session max      chat_sessions.message_count           100 msgs (default)
+         (DB-side check — no Redis involved)
+
+Layer 3  User daily msgs  chat:rl:user:day:msgs:{t}:{u}:{date}  200/day (default)
+         (Redis INCR + EXPIRE, Lua for atomicity)
+
+Layer 4  Tenant monthly   chat:rl:tenant:month:tokens:{t}:{ym}  10M tokens (default)
+         (incremented post-call, best-effort — never blocks on Redis failure)
+
+Limits configurable via:
+  - tenant.settings JSONB (per-tenant defaults)
+  - user_token_overrides table (per-user overrides, set via Moodle admin)
+  - rate_limit_rules table (global/scope rules)
+
+Rate limiter FAILS OPEN on Redis errors — Redis outage ≠ student lockout.
+
+
+PROMPT ARCHITECTURE
+--------------------
+All prompts are YAML files in app/services/ai/prompts/.
+Loaded at startup by prompts/loader.py with version tracking.
+
+Each YAML defines: model, temperature, max_tokens, system prompt, user template.
+
+intent_detect       temp=0.0  max=300    (deterministic classification)
+chat_answer         temp=0.4  max=2000   (main answer generation — see below)
+summary             temp=0.3  max=1000
+glossary            temp=0.2  max=1500
+flashcards          temp=0.3  max=2000
+quiz                temp=0.2  max=3000
+faq                 temp=0.3  max=1500
+infographic         temp=0.2  max=2000
+chapters            temp=0.2  max=1500   (video chapter markers)
+mindmap             temp=0.3  max=1000
+objectives          temp=0.2  max=800
+blooms              temp=0.1  max=600
+
+All prompts instruct the LLM to return valid JSON only.
+parser.py strips markdown code fences before JSON parsing.
+Structured output is the primary prompt injection defence.
+
+chat_answer.yaml is mode-parameterised:
+  The YAML contains template variables {mode_system_block}, {context_label},
+  {no_context_label}, {suggestions_example} which builder.py fills in based
+  on the session's chat_mode before sending to the LLM.
+
+  study mode injects:
+    mode_system_block   → educational assistant persona, answer from course content
+    context_label       → "COURSE CONTENT CONTEXT"
+    no_context_label    → "the course material doesn't cover this topic"
+    suggestions_example → examples including quiz_me, visualize, explain_more
+
+  support mode injects:
+    mode_system_block   → support assistant persona, KB-strict rules (never invent,
+                          always say NO_CONTEXT if not in KB, no quiz/visual suggestions)
+    context_label       → "KNOWLEDGE BASE CONTEXT (retrieved from support articles)"
+    no_context_label    → "the knowledge base has no information on this topic"
+    suggestions_example → follow-up question examples only (no quiz/visual)
+
+  Orchestrator also post-filters: strips any quiz_me or visualize suggestions
+  from the LLM response for support mode sessions (two-layer enforcement).
+
+Prompt versioning: get_prompt_version(prompt_name) returns a version hash
+embedded in every AIOutput row so quality regressions can be traced.
+
+
+KEY ENVIRONMENT VARIABLES
+--------------------------
+DATABASE_URL                 postgresql+asyncpg://...
+REDIS_URL                    redis://localhost:6379/0
+QDRANT_URL                   http://localhost:6333
+QDRANT_API_KEY               (optional, for Qdrant Cloud)
+OPENAI_API_KEY               sk-...
+MASTER_API_KEY               (admin endpoint protection)
+AXIS_DEV_API_KEY             (dev/test tenant key)
+SECRET_KEY                   (random 32+ char string, JWT signing)
+VIMEO_ACCESS_TOKEN           (global fallback; per-tenant override via metadata)
+
+# Model overrides (all optional — defaults shown)
+MODEL_EMBED                  text-embedding-3-small
+MODEL_FAST                   gpt-4o-mini
+MODEL_MAIN                   gpt-4o
+
+# Rate limits (all optional — defaults shown)
+CHAT_COOLDOWN_SECONDS        2
+CHAT_MAX_SESSION_MESSAGES    100
+CHAT_MAX_USER_MESSAGES_DAY   200
+CHAT_MAX_TENANT_TOKENS_MONTH 10000000
+CHAT_SESSION_TTL_HOURS       4
+CHAT_RAG_MIN_SCORE           0.35
+CHAT_HISTORY_WINDOW          10
+
+
+API ENDPOINTS SUMMARY
+----------------------
+GET  /api/v1/health
+
+# Ingest
+POST /api/v1/ingest                           URL-based ingest
+POST /api/v1/ingest/file                      Binary file upload
+POST /api/v1/ingest/structured                Pre-extracted SCORM/H5P chunks
+
+# Jobs (Celery task status polling)
+GET  /api/v1/jobs/{job_id}                    Job status + progress
+
+# Content — read-only, learner-facing
+GET  /api/v1/content/{id}/outputs             List all active outputs
+GET  /api/v1/content/{id}/quiz                Raw quiz output
+GET  /api/v1/content/{id}/faq                 FAQ with typed items
+GET  /api/v1/content/{id}/infographic         Infographic JSON
+GET  /api/v1/content/{id}/infographic/html    Infographic raw HTML
+GET  /api/v1/content/{id}/transcript          Timed transcript segments
+GET  /api/v1/content/{id}/chapters            AI chapter markers
+GET  /api/v1/content/{id}/mindmap             Mindmap output
+GET  /api/v1/content/{id}/objectives          Learning objectives
+GET  /api/v1/content/{id}/blooms              Bloom's analysis
+POST /api/v1/content/{id}/generate            Queue on-demand generation
+
+# Teacher management (CRUD + pool management)
+GET/PUT /api/v1/content/{id}/summary
+GET     /api/v1/content/{id}/glossary
+GET/PUT/DELETE /api/v1/content/{id}/glossary/terms/{term_id}
+GET/POST /api/v1/content/{id}/flashcards
+GET/PUT/DELETE /api/v1/content/{id}/flashcards/{flashcard_id}
+POST    /api/v1/content/{id}/flashcards/regenerate
+GET/POST /api/v1/content/{id}/quiz-questions
+GET/PUT/DELETE /api/v1/content/{id}/quiz-questions/{question_id}
+POST    /api/v1/content/{id}/quiz-questions/regenerate
+
+# Chat
+POST /api/v1/chat/sessions                    Create session
+POST /api/v1/chat/sessions/{id}/message       Send message
+GET  /api/v1/chat/sessions/{id}               Session info
+GET  /api/v1/chat/sessions/{id}/history       Full message history
+POST /api/v1/chat/sessions/{id}/end           End session
+
+# Knowledge Base
+POST   /api/v1/kb/ingest                      Ingest KB item by URL
+POST   /api/v1/kb/ingest/text                 Ingest from plain text (inline)
+POST   /api/v1/kb/ingest/base64               Ingest from base64-encoded file
+POST   /api/v1/kb/ingest/file                 Ingest from multipart file upload
+GET    /api/v1/kb/items                       List KB items (includes content field)
+GET    /api/v1/kb/items/{id}                  Item detail
+PUT    /api/v1/kb/items/{id}                  Toggle is_active (enable/disable)
+DELETE /api/v1/kb/items/{id}                  Remove item from DB + Qdrant
+POST   /api/v1/kb/items/{id}/delete           Same as DELETE (POST alias for Moodle
+                                               curl compat — curl.post() overrides
+                                               CURLOPT_CUSTOMREQUEST)
+POST   /api/v1/kb/items/{id}/reindex          Re-queue indexing with updated text/
+                                               title/doc_type; preserves UUID;
+                                               old vectors deleted, new inserted
+POST   /api/v1/kb/backfill-active             Stamp is_active=True on Qdrant payloads
+                                               for all active+ready KB items; fixes
+                                               chunks ingested before is_active was
+                                               added to the upsert logic
+
+# Admin
+GET    /api/v1/admin/tenants                  List tenants
+GET    /api/v1/admin/tenants/{id}             Tenant detail
+PUT    /api/v1/admin/tenants/{id}             Update tenant settings/limits
+PUT    /api/v1/admin/tenants/{id}/status      Activate / suspend tenant
+
+
+SECURITY NOTES
+---------------
+- API keys: SHA-256 hashed at creation, raw key shown once only
+- No PII stored in Qdrant payloads (only content text + IDs)
+- Prompt injection: 16 weighted pattern scorer (score ≥ 3 = blocked message)
+- Unicode: NFKC normalisation prevents homoglyph attacks
+- Error responses: never expose stack traces or internal details
+- tenant_id on every query: cross-tenant access architecturally impossible
+- Redis rate limiter fails open (Redis outage ≠ student lockout)
+- MASTER_API_KEY protects admin endpoints (separate from tenant keys)
+- Content hash: prevents re-processing unchanged content (cost control)
+- Celery tasks: job_id passed explicitly — no ambient state between tasks

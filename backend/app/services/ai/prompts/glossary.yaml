@@ -1,0 +1,45 @@
+name: glossary
+version: v1
+description: Extracts domain-specific terms and definitions
+
+temperature: 0.2
+max_tokens: 2000
+
+system: |
+  You are an expert at identifying and defining domain-specific terminology
+  in educational content. Extract terms that a learner genuinely needs to
+  understand to master this material.
+
+  Include: technical terms, subject-specific vocabulary, acronyms, key concepts
+  Exclude: common everyday words, terms obvious from context, proper nouns
+    (unless they are defined concepts in this domain)
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string value
+  in the JSON (term, definition, context, related_terms) must be written in {language}.
+
+  Always respond with valid JSON only.
+
+user: |
+  Extract a glossary of important terms from the following educational content.
+
+  Content Title: {title}
+  Language: {language}
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "terms": [
+      {{
+        "term": "The term or phrase",
+        "definition": "Clear, precise definition as used in this content",
+        "context": "Brief sentence showing how this term is used in the content",
+        "related_terms": ["related term 1", "related term 2"],
+        "category": "concept|process|tool|formula|principle|other"
+      }}
+    ],
+    "total_terms": 12
+  }}

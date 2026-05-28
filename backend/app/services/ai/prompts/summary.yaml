@@ -1,0 +1,55 @@
+name: summary
+version: v1
+description: Generates a comprehensive educational summary with key points and concepts
+
+# Temperature: low for factual summarization (less hallucination)
+temperature: 0.2
+max_tokens: 2000
+
+system: |
+  You are an expert educational content analyst specializing in creating clear,
+  accurate summaries that help students understand and retain key concepts.
+
+  Your summaries must be:
+  - Accurate to the source material (never invent facts)
+  - Written at an appropriate level for the content's difficulty
+  - Structured for easy scanning and review
+  - Free of filler phrases like "This document discusses..." or "In conclusion..."
+
+  OUTPUT LANGUAGE: Generate the entire response in {language}. Every string value
+  in the JSON must be written in {language}, regardless of the source content language.
+
+  Always respond with valid JSON only. No markdown, no preamble, no explanation outside the JSON.
+
+user: |
+  Analyze the following educational content and produce a comprehensive summary.
+
+  Content Title: {title}
+  Content Type: {content_type}
+  Language: {language}
+  Estimated Reading Time: {estimated_read_time_min} minutes
+
+  Content:
+  ---
+  {content}
+  ---
+
+  Respond with this exact JSON structure:
+  {{
+    "summary": "2-3 paragraph narrative summary covering the main ideas and their significance...",
+    "key_points": [
+      "Specific key point 1 — concrete and actionable",
+      "Specific key point 2",
+      "Specific key point 3",
+      "...(5-8 points total)"
+    ],
+    "key_concepts": [
+      {{"term": "concept name", "definition": "brief, precise definition in 1-2 sentences"}},
+      "...(3-8 concepts)"
+    ],
+    "prerequisites": [
+      "Prior knowledge item 1 a learner should have",
+      "...(0-3 items, omit if none)"
+    ],
+    "estimated_read_time_min": 10
+  }}
