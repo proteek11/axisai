@@ -62,41 +62,188 @@ export default function LandingPage() {
         }
         .lp-btn-primary-sm:hover { opacity: 0.88; }
 
-        /* HERO */
-        .lp-hero {
-          padding: 80px 40px 70px; max-width: 1120px; margin: 0 auto;
-          display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
-        }
-        .lp-hero h1 { font-size: 42px; font-weight: 500; line-height: 1.18; margin-bottom: 20px; }
-        .lp-hero h1 em { font-style: normal; color: var(--lp-blue); }
-        .lp-hero > div > p { font-size: 16px; color: var(--lp-text-muted); line-height: 1.75; margin-bottom: 32px; max-width: 460px; }
-        .lp-tag {
-          display: inline-flex; align-items: center; gap: 6px;
-          font-size: 12px; font-weight: 500; color: var(--lp-blue);
-          background: var(--lp-blue-light); border: 1px solid var(--lp-blue-border);
-          border-radius: 20px; padding: 5px 14px; margin-bottom: 22px;
-        }
-        .lp-tag-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--lp-blue); display: inline-block; }
-        .lp-hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
-        .lp-btn-primary {
-          display: inline-flex; align-items: center; gap: 8px;
-          font-size: 15px; font-weight: 500; color: #fff; background: var(--lp-blue);
-          border-radius: var(--lp-radius-sm); padding: 12px 24px; transition: opacity 0.15s;
-        }
-        .lp-btn-primary:hover { opacity: 0.88; }
-        .lp-btn-ghost {
-          display: inline-flex; align-items: center; gap: 8px;
-          font-size: 15px; color: var(--lp-text); background: transparent;
-          border: 1px solid var(--lp-border); border-radius: var(--lp-radius-sm);
-          padding: 12px 24px; transition: border-color 0.15s;
-        }
-        .lp-btn-ghost:hover { border-color: var(--lp-text-muted); }
+        /* PREMIUM HERO */
+.lp-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 110px 40px 90px;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 70px;
+  align-items: center;
 
+  background:
+    linear-gradient(
+      rgba(255,255,255,0.72),
+      rgba(255,255,255,0.72)
+    ),
+    url('/tree.jpg');
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  border-radius: 34px;
+  min-height: 760px;
+}
+
+        .lp-hero::before {
+          content: '';
+          position: absolute;
+          width: 500px;
+          height: 500px;
+          background: radial-gradient(circle, rgba(20,71,230,0.22) 0%, rgba(20,71,230,0) 70%);
+          top: -120px;
+          left: -100px;
+          pointer-events: none;
+        }
+
+        .lp-hero::after {
+          content: '';
+          position: absolute;
+          width: 420px;
+          height: 420px;
+          background: radial-gradient(circle, rgba(88,80,236,0.18) 0%, rgba(88,80,236,0) 70%);
+          bottom: -140px;
+          right: -100px;
+          pointer-events: none;
+        }
+
+        .lp-hero h1 {
+          font-size: 72px;
+          line-height: 1.02;
+          font-weight: 700;
+          letter-spacing: -0.04em;
+          margin-bottom: 28px;
+          max-width: 720px;
+        }
+
+        .lp-hero h1 em {
+          font-style: normal;
+          background: linear-gradient(90deg, #1447e6 0%, #6f8cff 50%, #7c3aed 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .lp-hero > div > p {
+          font-size: 18px;
+          color: #6b7280;
+          line-height: 1.9;
+          max-width: 560px;
+          margin-bottom: 36px;
+        }
+
+      .lp-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(20,71,230,0.08);
+        border: 1px solid rgba(20,71,230,0.18);
+        padding: 8px 16px;
+        border-radius: 999px;
+        color: #1447e6;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 28px;
+        backdrop-filter: blur(10px);
+
+        cursor: pointer;
+        transition:
+          transform .3s ease,
+          box-shadow .3s ease,
+          border-color .3s ease,
+          background .3s ease;
+      }
+
+      .lp-tag:hover {
+        transform: translateY(-3px);
+        background: rgba(20,71,230,0.12);
+        border-color: rgba(20,71,230,0.35);
+        box-shadow:
+          0 12px 28px rgba(20,71,230,.14);
+      }
+.lp-active-badge {
+  font-size: 12px;
+  color: #1447e6;
+  font-weight: 600;
+  background: rgba(20,71,230,.08);
+  border: 1px solid rgba(20,71,230,.15);
+  padding: 5px 10px;
+  border-radius: 999px;
+
+  cursor: pointer;
+  transition:
+    transform .3s ease,
+    box-shadow .3s ease,
+    border-color .3s ease,
+    background .3s ease;
+}
+
+.lp-active-badge:hover {
+  transform: translateY(-2px);
+  background: rgba(20,71,230,.12);
+  border-color: rgba(20,71,230,.3);
+  box-shadow:
+    0 10px 24px rgba(20,71,230,.14);
+}
+        .lp-hero-btns {
+          display: flex;
+          gap: 16px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .lp-btn-primary {
+          background: linear-gradient(135deg, #1447e6 0%, #315efb 100%);
+          color: white;
+          border-radius: 14px;
+          padding: 15px 28px;
+          font-size: 15px;
+          font-weight: 600;
+          box-shadow:
+            0 10px 30px rgba(20,71,230,0.25),
+            inset 0 1px 0 rgba(255,255,255,0.2);
+          transition: all 0.25s ease;
+        }
+
+        .lp-btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow:
+            0 18px 40px rgba(20,71,230,0.32),
+            inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+
+        .lp-btn-ghost {
+          background: rgba(255,255,255,0.72);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(0,0,0,0.06);
+          border-radius: 14px;
+          padding: 15px 24px;
+          font-size: 15px;
+          font-weight: 500;
+          transition: all 0.25s ease;
+        }
+
+        .lp-btn-ghost:hover {
+          background: white;
+          transform: translateY(-2px);
+        }
         /* HERO VISUAL */
         .lp-visual {
-          background: var(--lp-bg-muted); border-radius: var(--lp-radius);
-          border: 1px solid var(--lp-border); padding: 22px;
-          display: flex; flex-direction: column; gap: 10px;
+          position: relative;
+          background: rgba(255,255,255,0.7);
+          backdrop-filter: blur(24px);
+          border-radius: 28px;
+          border: 1px solid rgba(255,255,255,0.45);
+          padding: 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          box-shadow:
+            0 20px 60px rgba(15,23,42,0.08),
+            inset 0 1px 0 rgba(255,255,255,0.5);
         }
         .lp-chat-row { display: flex; gap: 10px; align-items: flex-start; }
         .lp-chat-avatar {
@@ -111,10 +258,32 @@ export default function LandingPage() {
         .lp-chat-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--lp-text-muted); }
         .lp-dot-green { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block; flex-shrink: 0; }
         .lp-chip-row { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 2px; }
+         /* added hover effects */
         .lp-chip {
-          background: var(--lp-bg); border: 1px solid var(--lp-border); border-radius: 6px;
-          padding: 4px 10px; font-size: 11px; color: var(--lp-text-muted);
-          display: flex; align-items: center; gap: 5px;
+          background: rgba(255,255,255,0.78);
+          border: 1px solid rgba(20,71,230,0.10);
+          border-radius: 12px;
+          padding: 8px 14px;
+          font-size: 12px;
+          color: #475569;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition:
+            all 0.28s ease,
+            transform 0.22s ease,
+            box-shadow 0.28s ease;
+        }
+
+        .lp-chip:hover {
+          transform: translateY(-3px);
+          background: rgba(20,71,230,0.08);
+          border-color: rgba(20,71,230,0.28);
+          color: #1447e6;
+          box-shadow:
+            0 10px 24px rgba(20,71,230,0.12),
+            0 0 0 1px rgba(20,71,230,0.06);
         }
 
         /* TRUST BAR */
@@ -241,7 +410,37 @@ export default function LandingPage() {
         .lp-footer-col a:hover { color: rgba(255,255,255,0.85); }
         .lp-footer-bottom { padding-top: 28px; display: flex; align-items: center; justify-content: space-between; }
         .lp-footer-bottom p { font-size: 12px; color: rgba(255,255,255,0.2); }
+/* PREMIUM VISUAL CARD HOVERS */
 
+.lp-upload-card,
+.lp-stat-card,
+.lp-insight-card {
+  transition:
+    transform .35s ease,
+    box-shadow .35s ease,
+    border-color .35s ease;
+  cursor: pointer;
+}
+
+.lp-upload-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(20,71,230,.28);
+  box-shadow:
+    0 20px 40px rgba(20,71,230,.12);
+}
+
+.lp-stat-card:hover {
+  transform: translateY(-5px);
+  border-color: #c7d9ff;
+  box-shadow:
+    0 18px 36px rgba(20,71,230,.12);
+}
+
+.lp-insight-card:hover {
+  transform: translateY(-6px);
+  box-shadow:
+    0 25px 50px rgba(15,23,42,.35);
+}
         /* RESPONSIVE */
         @media (max-width: 960px) {
           .lp-hero { grid-template-columns: 1fr; gap: 40px; padding: 50px 24px 40px; }
@@ -293,44 +492,178 @@ export default function LandingPage() {
         {/* HERO */}
         <div className="lp-hero">
           <div>
-            <div className="lp-tag"><span className="lp-tag-dot" /> Intelligent learning, for any platform</div>
-            <h1>Turn any content into <em>powerful learning</em> experiences</h1>
-            <p>Axis AI transforms PDFs, videos, web pages, and SCORM content into summaries, quizzes, flashcards, mind maps, and an AI study assistant &mdash; standalone or connected to your LMS.</p>
+            <div className="lp-tag">
+              <span className="lp-tag-dot" />
+              AI-native learning intelligence
+            </div>
+
+            <h1>
+              Build <em>smarter learning</em>
+              <br />
+              experiences with AI
+            </h1>
+
+            <p>
+              AXIS AI is getting changed for testing
+            </p>
+
             <div className="lp-hero-btns">
-              <Link href="/login"><button className="lp-btn-primary">Start free &rarr;</button></Link>
-              <a href="#how-it-works"><button className="lp-btn-ghost">
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 5l3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                See how it works
-              </button></a>
+              <Link href="/login">
+                <button className="lp-btn-primary">
+                  Start building →
+                </button>
+              </Link>
+
+              <button className="lp-btn-ghost">
+                Watch demo
+              </button>
             </div>
           </div>
-          <div className="lp-visual">
-            <div className="lp-chat-status">
-              <span className="lp-dot-green" />
-              Processing: <strong style={{color:'#0c090c', fontSize:'12px', marginLeft:'2px'}}>Advanced SQL Indexing.pdf</strong>
-            </div>
-            <div className="lp-bubble lp-bubble-ai" style={{fontSize:'12px'}}>
-              &#10003; Summary &nbsp;&middot;&nbsp; 14 quiz questions &nbsp;&middot;&nbsp; 28 flashcards &nbsp;&middot;&nbsp; Glossary ready
-            </div>
-            <div className="lp-chat-row">
-              <div className="lp-bubble">&#128172; &nbsp;&ldquo;What&apos;s the difference between clustered and non-clustered indexes?&rdquo;</div>
-            </div>
-            <div className="lp-chat-row">
-              <div className="lp-chat-avatar">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3.5 3.5L11 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div className="lp-bubble lp-bubble-ai">
-                A clustered index determines the physical order of rows &mdash; each table can only have one. A non-clustered index stores a separate lookup with pointers back to the rows&hellip;
-                <span style={{display:'block', marginTop:'6px', fontSize:'11px', opacity:0.65}}>&#128206; Source: pg. 12 &mdash; SQL Indexing.pdf</span>
-              </div>
-            </div>
-            <div className="lp-chip-row">
-              <span className="lp-chip">&#9679; Instant answers</span>
-              <span className="lp-chip">&#8599; Source-cited</span>
-              <span className="lp-chip">&#9679; Multilingual</span>
-              <span className="lp-chip">&#9632; Any format</span>
-            </div>
-          </div>
+          {/* Hover */}
+    <div className="lp-visual">
+
+      <div style={{
+        display:'flex',
+        justifyContent:'space-between',
+        alignItems:'center',
+        marginBottom:'8px'
+      }}>
+        <div className="lp-chat-status">
+          <span className="lp-dot-green" />
+          Live AI workspace
+        </div>
+
+    <div className="lp-active-badge">
+      ACTIVE
+    </div>
+      </div>
+
+    <div
+      className="lp-upload-card"
+      style={{
+        background:'rgba(20,71,230,.04)',
+        border:'1px solid rgba(20,71,230,.12)',
+        borderRadius:'18px',
+        padding:'18px'
+    }}
+    >
+    <div style={{
+      display:'flex',
+      justifyContent:'space-between',
+      marginBottom:'10px'
+    }}>
+      <strong>Business Strategy.pdf</strong>
+
+      <span style={{
+        fontSize:'12px',
+        color:'#16a34a',
+        fontWeight:600
+      }}>
+        Processed
+      </span>
+    </div>
+
+    <div style={{
+      height:'8px',
+      background:'#e5e7eb',
+      borderRadius:'999px',
+      overflow:'hidden',
+      marginBottom:'12px'
+    }}>
+      <div style={{
+        width:'100%',
+        height:'100%',
+        background:'linear-gradient(90deg,#1447e6,#7c3aed)'
+      }} />
+    </div>
+
+    <div style={{
+      display:'flex',
+      gap:'8px',
+      flexWrap:'wrap'
+    }}>
+      <span className="lp-chip">✓ Summary</span>
+      <span className="lp-chip">✓ Quiz</span>
+      <span className="lp-chip">✓ Flashcards</span>
+      <span className="lp-chip">✓ AI Tutor</span>
+    </div>
+  </div>
+
+  <div style={{
+    display:'grid',
+    gridTemplateColumns:'1fr 1fr',
+    gap:'12px'
+  }}>
+<div
+  className="lp-stat-card"
+  style={{
+    background:'white',
+    border:'1px solid #eef2ff',
+    borderRadius:'18px',
+    padding:'18px'
+}}
+>
+      <div style={{fontSize:'12px', color:'#6b7280'}}>Quiz Accuracy</div>
+      <div style={{fontSize:'28px', fontWeight:700}}>94%</div>
+      <div style={{fontSize:'12px', color:'#16a34a'}}>
+        +12% learner improvement
+      </div>
+    </div>
+
+    <div 
+    className="lp-stat-card"
+    style={{
+      background:'white',
+      border:'1px solid #eef2ff',
+      borderRadius:'18px',
+      padding:'18px'
+    }}>
+      <div style={{fontSize:'12px', color:'#6b7280'}}>AI Responses</div>
+      <div style={{fontSize:'28px', fontWeight:700}}>2.1s</div>
+      <div style={{fontSize:'12px', color:'#1447e6'}}>
+        Avg response time
+      </div>
+    </div>
+  </div>
+
+<div
+  className="lp-insight-card"
+  style={{
+    background:'linear-gradient(135deg,#0f172a,#1e293b)',
+    borderRadius:'22px',
+    padding:'22px',
+    color:'white'
+}}
+>
+    <div style={{
+      fontSize:'12px',
+      opacity:.65,
+      marginBottom:'8px'
+    }}>
+      AI INSIGHT
+    </div>
+
+    <div style={{
+      fontSize:'16px',
+      lineHeight:'1.7',
+      marginBottom:'14px'
+    }}>
+      Learners engaging with flashcards and AI tutoring
+      showed higher retention and faster revision cycles.
+    </div>
+
+    <div style={{
+      display:'flex',
+      gap:'8px',
+      flexWrap:'wrap'
+    }}>
+      <span className="lp-chip">AI Analytics</span>
+      <span className="lp-chip">Smart Learning</span>
+      <span className="lp-chip">Retention</span>
+    </div>
+  </div>
+
+</div>
         </div>
 
         {/* TRUST BAR */}
